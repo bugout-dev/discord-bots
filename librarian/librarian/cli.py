@@ -43,11 +43,6 @@ def handle_run(args: argparse.Namespace) -> None:
     except Exception as err:
         raise Exception(err)
 
-    # Prepare embeddings
-    docsearch, qa_chain = prepare_embedding(bot.data)
-    bot.docsearch = docsearch
-    bot.qa_chain = qa_chain
-
     loop = asyncio.get_event_loop()
 
     # Handle shutdown signals
