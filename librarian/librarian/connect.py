@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -7,6 +8,7 @@ import aiohttp
 from bugout.data import BugoutSearchResult, BugoutSearchResults
 
 from .data import DispatchTypes
+from .embeddings import prepare_embedding
 from .settings import (
     BUGOUT_DISCORD_BOTS_ACCESS_TOKEN,
     BUGOUT_DISCORD_BOTS_JOURNAL_ID,
@@ -164,7 +166,7 @@ async def heartbeat(ws, bot, interval: int = 41250) -> None:
 
         try:
             update_data_with_prompt(bot)
-            logger.info("Fetched new data and prompt from Bugout")
+            logger.info("Fetched data and prompt from Bugout")
         except Exception as err:
             logger.error(err)
             pass
@@ -198,7 +200,14 @@ def update_data_with_prompt(bot):
     results: List[BugoutSearchResult] = response.results
     for result in results:
         if "function:data" in result.tags:
-            bot.data = result.content
+            current_data_hash = hashlib.md5(bot.data.encode("UTF-8")).hexdigest()
+            new_data_hash = hashlib.md5(result.content.encode("UTF-8")).hexdigest()
+            if current_data_hash != new_data_hash:
+                docsearch, qa_chain = prepare_embedding(result.content)
+                bot.docsearch = docsearch
+                bot.qa_chain = qa_chain
+                bot.data = result.content
+                logger.info("Regenerated embeddings for source data")
         if "function:prompt" in result.tags:
             content = result.content
             try:
