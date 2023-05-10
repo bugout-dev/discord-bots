@@ -110,6 +110,10 @@ class Bot:
         c = " ".join(words[0])
 
         if is_bot_mentioned:
+            logger.info(
+                f"Bot handling conversation: {c}. With {author_username} in channel_id {channel_id}"
+            )
+
             final_c = f"{self.prompt.prefix} Source text: {c}.{self.prompt.postfix}"
             docs = self.docsearch.similarity_search(query=final_c)
             answer = self.qa_chain.run(input_documents=docs, question=final_c)
