@@ -157,10 +157,10 @@ async def heartbeat(ws, bot, interval: int = 41250) -> None:
         await asyncio.sleep(interval / 1000)
         try:
             await ws.send_json({"op": 1, "d": d if d >= 1 else None})
+            logger.info(f"Sending opcode 1 with last_sequence(d): {d}")
+            d += 1
         except Exception as err:
             logger.error(f"Error sending heartbeat: {err}")
-        logger.info(f"Sending opcode 1 with last_sequence(d): {d}")
-        d += 1
 
         try:
             update_data_with_prompt(bot)
