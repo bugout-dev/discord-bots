@@ -155,7 +155,10 @@ async def heartbeat(ws, bot, interval: int = 41250) -> None:
     while True:
         # To seconds from milliseconds: interval/1000
         await asyncio.sleep(interval / 1000)
-        await ws.send_json({"op": 1, "d": d if d >= 1 else None})
+        try:
+            await ws.send_json({"op": 1, "d": d if d >= 1 else None})
+        except Exception as err:
+            logger.error(f"Error sending heartbeat: {err}")
         logger.info(f"Sending opcode 1 with last_sequence(d): {d}")
         d += 1
 
