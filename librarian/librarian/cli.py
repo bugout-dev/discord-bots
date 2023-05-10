@@ -1,21 +1,11 @@
 import argparse
 import asyncio
-import json
 import logging
-import platform
 import signal
-from typing import Any, List
-
-from bugout.data import BugoutSearchResult, BugoutSearchResults
 
 from .bot import Bot
-from .connect import run_listener
+from .connect import run_listener, update_data_with_prompt
 from .embeddings import prepare_embedding
-from .settings import (
-    BUGOUT_DISCORD_BOTS_ACCESS_TOKEN,
-    BUGOUT_DISCORD_BOTS_JOURNAL_ID,
-    bugout,
-)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,34 +37,11 @@ def handle_run(args: argparse.Namespace) -> None:
     """
     bot = Bot()
 
-    # Fetch data and prompt
-    response: BugoutSearchResults = bugout.search(
-        token=BUGOUT_DISCORD_BOTS_ACCESS_TOKEN,
-        journal_id=BUGOUT_DISCORD_BOTS_JOURNAL_ID,
-        query="tag:bot_username:librarian",
-    )
-    total_results = response.total_results
-    if total_results != 2:
-        logger.error(
-            f"Wrong number: {total_results} of entires fetch from Bugout journal"
-        )
-        return
-
-    results: List[BugoutSearchResult] = response.results
-    for result in results:
-        if "function:data" in result.tags:
-            bot.data = result.content
-        if "function:prompt" in result.tags:
-            content = result.content
-            try:
-                content_json = json.loads(content)
-                bot.prompt.prefix = content_json.get("prefix", "")
-                bot.prompt.postfix = content_json.get("postfix", "")
-            except Exception as err:
-                logger.error(
-                    f"Unable to parse bugout entry with bot prompt, err: {err}"
-                )
-                return
+    # Fetch updated data and prompt from Bugout journal
+    try:
+        update_data_with_prompt(bot)
+    except Exception as err:
+        raise Exception(err)
 
     # Prepare embeddings
     docsearch, qa_chain = prepare_embedding(bot.data)

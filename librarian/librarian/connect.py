@@ -1,12 +1,20 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import aiohttp
+from bugout.data import BugoutSearchResult, BugoutSearchResults
 
 from .data import DispatchTypes
-from .settings import DISCORD_BASE_API_URL, DISCORD_BOT_USERNAME, DISCORD_GUILD_ID
+from .settings import (
+    BUGOUT_DISCORD_BOTS_ACCESS_TOKEN,
+    BUGOUT_DISCORD_BOTS_JOURNAL_ID,
+    DISCORD_BASE_API_URL,
+    DISCORD_BOT_USERNAME,
+    DISCORD_GUILD_ID,
+    bugout,
+)
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
@@ -84,7 +92,7 @@ async def ws_listener(
                 if data["op"] == 10:
                     logger.info("Recieved 10 - Hello Heartbeat")
                     asyncio.ensure_future(
-                        heartbeat(ws, data["d"]["heartbeat_interval"])
+                        heartbeat(ws, bot, data["d"]["heartbeat_interval"])
                     )
                     await ws.send_json(
                         {
@@ -139,7 +147,7 @@ async def ws_listener(
                     logger.info(f"Received unknown opcode {data['op']}")
 
 
-async def heartbeat(ws, interval: int = 41250) -> None:
+async def heartbeat(ws, bot, interval: int = 41250) -> None:
     """
     Send heartbeat.
     """
@@ -151,6 +159,13 @@ async def heartbeat(ws, interval: int = 41250) -> None:
         logger.info(f"Sending opcode 1 with last_sequence(d): {d}")
         d += 1
 
+        try:
+            update_data_with_prompt(bot)
+            logger.info("Fetched new data and prompt from Bugout")
+        except Exception as err:
+            logger.error(err)
+            pass
+
 
 async def run_listener(bot) -> None:
     gateway = await get_gateway(bot.token)
@@ -159,3 +174,36 @@ async def run_listener(bot) -> None:
     logger.info(f"Received ws_url:{ws_url}, starting ws listener...")
 
     await ws_listener(bot)
+
+
+def update_data_with_prompt(bot):
+    """
+    Fetch updated data and prompt from Bugout journal.
+    """
+    response: BugoutSearchResults = bugout.search(
+        token=BUGOUT_DISCORD_BOTS_ACCESS_TOKEN,
+        journal_id=BUGOUT_DISCORD_BOTS_JOURNAL_ID,
+        query="tag:bot_username:librarian",
+    )
+    total_results = response.total_results
+    if total_results != 2:
+        logger.error(
+            f"Wrong number: {total_results} of entires fetch from Bugout journal"
+        )
+        raise Exception("Unable to fetch data from Bugout journal")
+
+    results: List[BugoutSearchResult] = response.results
+    for result in results:
+        if "function:data" in result.tags:
+            bot.data = result.content
+        if "function:prompt" in result.tags:
+            content = result.content
+            try:
+                content_json = json.loads(content)
+                bot.prompt.prefix = content_json.get("prefix", "")
+                bot.prompt.postfix = content_json.get("postfix", "")
+            except Exception as err:
+                logger.error(
+                    f"Unable to parse bugout entry with bot prompt, err: {err}"
+                )
+                raise Exception("Unable to parse Bugout journal entry with bot prompt")
