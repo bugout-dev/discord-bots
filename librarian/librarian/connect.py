@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import sys
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -80,73 +81,92 @@ async def send_message(token: str, channel_id: str, content: str) -> Dict[str, A
 
 async def ws_listener(
     bot,
+    max_retries: int = 5,
 ) -> None:
     """
     10 - Hello, opcode 2 - Identify
     11 - Ack Heartbeat
     0 - Any data
     """
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(f"{bot.ws_url}?v=6&encoding=json") as ws:
-            async for msg in ws:
-                data = json.loads(msg.data)
+    retries = 0
+    while retries < max_retries:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(f"{bot.ws_url}?v=6&encoding=json") as ws:
+                    async for msg in ws:
+                        data = json.loads(msg.data)
 
-                if data["op"] == 10:
-                    logger.info("Recieved 10 - Hello Heartbeat")
-                    asyncio.ensure_future(
-                        heartbeat(ws, bot, data["d"]["heartbeat_interval"])
-                    )
-                    await ws.send_json(
-                        {
-                            "op": 2,
-                            "d": {
-                                "token": bot.token,
-                                "properties": {},
-                                "compress": False,
-                                "large_threshold": 250,
-                            },
-                        }
-                    )
+                        if data["op"] == 7:
+                            logger.info("Received 7 - Reconnect")
+                            raise ConnectionResetError
 
-                elif data["op"] == 11:
-                    logger.info("Received 11 - Ack Heartbeat")
-
-                elif data["op"] == 0:
-                    logger.info(f"Received 0 - Dispatch")
-
-                    t = data["t"]
-                    if DispatchTypes.READY.value == t:
-                        logger.info(
-                            f"Bot established connection with Discord websockets, session_id is: {data['d']['session_id']}"
-                        )
-                    elif DispatchTypes.TYPING_START.value == t:
-                        pass
-                    elif DispatchTypes.MESSAGE_CREATE.value == t:
-                        d = data["d"]
-                        guild_id = d.get("guild_id", None)
-                        if guild_id is None:
-                            # Private message
-                            channel_id = d.get("channel_id")
-                            logger.warn(
-                                f"Communicated with bot in private message via channel id: {channel_id} and author: {d.get('author')}"
+                        elif data["op"] == 10:
+                            logger.info("Received 10 - Hello Heartbeat")
+                            asyncio.ensure_future(
+                                heartbeat(ws, bot, data["d"]["heartbeat_interval"])
                             )
-                        elif guild_id != "" and guild_id != DISCORD_GUILD_ID:
-                            # Wrong guild message if filter applied
-                            logger.warn(
-                                f"Communicated with bot in unknown guild: {guild_id}"
+                            await ws.send_json(
+                                {
+                                    "op": 2,
+                                    "d": {
+                                        "token": bot.token,
+                                        "properties": {},
+                                        "compress": False,
+                                        "large_threshold": 250,
+                                    },
+                                }
                             )
+
+                        elif data["op"] == 11:
+                            logger.info("Received 11 - Ack Heartbeat")
+
+                        elif data["op"] == 0:
+                            logger.info(f"Received 0 - Dispatch")
+
+                            t = data["t"]
+                            if DispatchTypes.READY.value == t:
+                                logger.info(
+                                    f"Bot established connection with Discord websockets, session_id is: {data['d']['session_id']}"
+                                )
+                            elif DispatchTypes.TYPING_START.value == t:
+                                pass
+                            elif DispatchTypes.MESSAGE_CREATE.value == t:
+                                d = data["d"]
+                                guild_id = d.get("guild_id", None)
+                                if guild_id is None:
+                                    # Private message
+                                    channel_id = d.get("channel_id")
+                                    logger.warn(
+                                        f"Communicated with bot in private message via channel id: {channel_id} and author: {d.get('author')}"
+                                    )
+                                elif guild_id != "" and guild_id != DISCORD_GUILD_ID:
+                                    # Wrong guild message if filter applied
+                                    logger.warn(
+                                        f"Communicated with bot in unknown guild: {guild_id}"
+                                    )
+                                else:
+                                    # Guild message
+                                    mentions = d.get("mentions", [])
+                                    for m in mentions:
+                                        m_id = m.get("id", "")
+                                        m_username = m.get("username", "")
+                                        if (
+                                            m_id == bot.app_id
+                                            and m_username == bot.username
+                                        ):
+                                            await bot.handle_mention(d)
+                            else:
+                                logger.info(f"Unhandled Dispatch type: {t}")
                         else:
-                            # Guild message
-                            mentions = d.get("mentions", [])
-                            for m in mentions:
-                                m_id = m.get("id", "")
-                                m_username = m.get("username", "")
-                                if m_id == bot.app_id and m_username == bot.username:
-                                    await bot.handle_mention(d)
-                    else:
-                        logger.info(f"Unhandled Dispatch type: {t}")
-                else:
-                    logger.info(f"Received unknown opcode {data['op']}")
+                            logger.info(f"Received unknown opcode {data['op']}")
+        except ConnectionResetError:
+            logger.error("Reconnecting...")
+            retries += 1
+            await asyncio.sleep(3)
+            continue
+        except Exception as err:
+            logger.error(f"Unhandled error occurred: {err}")
+            break
 
 
 async def heartbeat(ws, bot, interval: int = 41250) -> None:
@@ -155,6 +175,10 @@ async def heartbeat(ws, bot, interval: int = 41250) -> None:
     """
     d = 0
     while True:
+        # Check if websocket connection is open
+        if ws.closed:
+            logger.warn("Websocket connection is closed. Stopping this heartbeat")
+            break
         # To seconds from milliseconds: interval/1000
         await asyncio.sleep(interval / 1000)
         try:
