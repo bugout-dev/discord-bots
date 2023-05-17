@@ -159,6 +159,7 @@ async def ws_listener(
                                 logger.info(f"Unhandled Dispatch type: {t}")
                         else:
                             logger.info(f"Received unknown opcode {data['op']}")
+            retries = 0
         except ConnectionResetError:
             logger.error("Reconnecting...")
             retries += 1
