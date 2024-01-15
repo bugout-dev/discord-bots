@@ -129,7 +129,10 @@ class LeaderboardCog(commands.Cog):
         description="Leaderboard for on-chain activities",
     )
     async def leaderboard(self, interaction: discord.Interaction, id: str):
-        l_info, l_scores = actions.process_leaderboard_info_with_scores(id=id)
+        logger.info(
+            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/leaderboard{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET} "
+        )
+        l_info, l_scores = await actions.process_leaderboard_info_with_scores(id=id)
 
         if l_info is None and l_scores is None:
             await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
@@ -168,6 +171,9 @@ class PositionCog(commands.Cog):
 
     @app_commands.command(name="position", description=f"Show user results")
     async def position(self, interaction: discord.Interaction, address: str):
+        logger.info(
+            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/position{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET} "
+        )
         if self.bot.config == []:
             await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
             return
@@ -184,7 +190,7 @@ class PositionCog(commands.Cog):
             await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
             return
 
-        l_info, l_score = actions.process_leaderboard_info_with_position(
+        l_info, l_score = await actions.process_leaderboard_info_with_position(
             l_id=l_id, address=address
         )
         if l_score is None:

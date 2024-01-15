@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import re
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import requests
+import aiohttp
 
 from . import data
 from .settings import MOONSTREAM_ENGINE_API_URL
@@ -30,105 +31,78 @@ def query_input_validation(query_input: str) -> str:
     return query_input
 
 
-def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo]:
+async def caller_get(url: str, timeout: int = 5) -> Optional[Any]:
     try:
-        response = requests.request(
-            "GET",
-            url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}",
-            timeout=10,
-        )
-        response.raise_for_status()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=url, timeout=timeout) as response:
+                response.raise_for_status()
+                json_response = await response.json()
+                return json_response
     except Exception as e:
         logger.error(str(e))
         return None
 
-    return data.LeaderboardInfo(**response.json())
+
+async def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo]:
+    l_info: Optional[data.LeaderboardInfo] = None
+    response = await caller_get(
+        url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}"
+    )
+    if response is not None:
+        l_info = data.LeaderboardInfo(**response)
+    return l_info
 
 
-def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
-    try:
-        response = requests.request(
-            "GET",
-            url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/?leaderboard_id={str(l_id)}&limit=10&offset=0",
-            timeout=30,
-        )
-        response.raise_for_status()
-    except Exception as e:
-        logger.error(str(e))
-        return None
-
-    return [data.Score(**s) for s in response.json()]
+async def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
+    l_scores: Optional[List[data.Score]] = None
+    response = await caller_get(
+        url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/?leaderboard_id={str(l_id)}&limit=10&offset=0",
+        timeout=30,
+    )
+    if response is not None:
+        l_scores = [data.Score(**s) for s in response]
+    return l_scores
 
 
-def process_leaderboard_info_with_scores(
+async def process_leaderboard_info_with_scores(
     id: str,
 ) -> Tuple[Optional[data.LeaderboardInfo], Optional[List[data.Score]]]:
-    l_info: Optional[data.LeaderboardInfo] = None
-    l_scores: Optional[List[data.Score]] = None
-
     try:
         l_id = uuid.UUID(query_input_validation(id))
     except QueryNotValid as e:
         logger.error(e)
-        return l_info, l_scores
+        return None, None
     except Exception as e:
         logger.error(e)
-        return l_info, l_scores
+        return None, None
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_function: Dict[Future, str] = {
-            executor.submit(get_leaderboard_info, l_id): "get_leaderboard_info",
-            executor.submit(get_scores, l_id): "get_scores",
-        }
-        for future in as_completed(future_to_function):
-            func_name = future_to_function[future]
-            result = future.result()
-            if result is not None:
-                if func_name == "get_leaderboard_info":
-                    l_info = result
-                if func_name == "get_scores":
-                    l_scores = result
+    l_info, l_scores = await asyncio.gather(
+        get_leaderboard_info(l_id), get_scores(l_id)
+    )
 
     return l_info, l_scores
 
 
-def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
-    try:
-        response = requests.request(
-            "GET",
-            url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
-            timeout=10,
-        )
-        response.raise_for_status()
-    except Exception as e:
-        logger.error(str(e))
-        return None
-
-    l_scores = [data.Score(**s) for s in response.json()]
-    if len(l_scores) != 1:
-        logger.error(f"Wrong number of positions: {len(l_scores)}")
-
-    return l_scores[0]
+async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
+    l_position: Optional[data.Score] = None
+    response = await caller_get(
+        url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
+    )
+    if response is not None:
+        l_scores = [data.Score(**s) for s in response]
+        if len(l_scores) == 1:
+            l_position = l_scores[0]
+    return l_position
 
 
-def process_leaderboard_info_with_position(
+async def process_leaderboard_info_with_position(
     l_id: uuid.UUID, address: str
 ) -> Tuple[Optional[data.LeaderboardInfo], Optional[data.Score]]:
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_function: Dict[Future, str] = {
-            executor.submit(get_leaderboard_info, l_id): "get_leaderboard_info",
-            executor.submit(get_position, l_id, address): "get_position",
-        }
-        for future in as_completed(future_to_function):
-            func_name = future_to_function[future]
-            result = future.result()
-            if result is not None:
-                if func_name == "get_leaderboard_info":
-                    l_info = result
-                if func_name == "get_position":
-                    l_score = result
+    l_info, l_position = await asyncio.gather(
+        get_leaderboard_info(l_id), get_position(l_id, address)
+    )
 
-    return l_info, l_score
+    return l_info, l_position
 
 
 class TabularData:

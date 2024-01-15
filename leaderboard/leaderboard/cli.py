@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -29,7 +30,9 @@ def discord_run_handler(args: argparse.Namespace) -> None:
 
 
 def test_handler(args: argparse.Namespace) -> None:
-    l_info, l_scores = actions.process_leaderboard_info_with_scores(id=args.id)
+    l_info, l_scores = asyncio.run(
+        actions.process_leaderboard_info_with_scores(id=args.id)
+    )
 
     if l_info is not None:
         print(l_info.description)

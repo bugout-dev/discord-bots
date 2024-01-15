@@ -12,8 +12,8 @@ setup(
     version=VERSION,
     packages=find_packages(),
     install_requires=[
+        "aiohttp",
         "discord.py",
-        "requests",
         "pydantic",
     ],
     extras_require={
