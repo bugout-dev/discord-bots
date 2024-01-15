@@ -29,7 +29,7 @@ def discord_run_handler(args: argparse.Namespace) -> None:
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)
 
 
-def test_handler(args: argparse.Namespace) -> None:
+def test_table_handler(args: argparse.Namespace) -> None:
     l_info, l_scores = asyncio.run(
         actions.process_leaderboard_info_with_scores(l_id=args.id)
     )
@@ -68,14 +68,14 @@ def main() -> None:
     )
     parser_discord_run.set_defaults(func=discord_run_handler)
 
-    parser_test = subcommands.add_parser("test", description="Test")
-    parser_test.add_argument(
+    parser_test_table = subcommands.add_parser("test-table", description="Test")
+    parser_test_table.add_argument(
         "-i",
         "--id",
         type=str,
         help="Leaderboard id",
     )
-    parser_test.set_defaults(func=test_handler)
+    parser_test_table.set_defaults(func=test_table_handler)
 
     args = parser.parse_args()
     args.func(args)
