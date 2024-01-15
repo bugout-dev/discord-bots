@@ -51,8 +51,8 @@ if [ ! -d "${SECRETS_DIR}" ]; then
   mkdir "${SECRETS_DIR}"
   echo -e "${PREFIX_WARN} Created new secrets directory"
 fi
-AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" /home/ubuntu/go/bin/checkenv show aws_ssm+leaderboard:true,bot:true > "${PARAMETERS_ENV_PATH}"
-chmod 0640 "${PARAMETERS_ENV_PATH}"
+# AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" /home/ubuntu/go/bin/checkenv show aws_ssm+leaderboard:true,bot:true > "${PARAMETERS_ENV_PATH}"
+# chmod 0640 "${PARAMETERS_ENV_PATH}"
 
 echo
 echo
