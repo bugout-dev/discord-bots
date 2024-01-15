@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import discord
 from discord import app_commands
@@ -124,24 +124,36 @@ class LeaderboardCog(commands.Cog):
 
         return embed
 
+    async def background_process(
+        self,
+        user: discord.user.User,
+        channel: discord.channel.TextChannel,
+        l_id: str,
+    ):
+        l_info, l_scores = await actions.process_leaderboard_info_with_scores(l_id=l_id)
+
+        if l_info is None and l_scores is None:
+            await channel.send(f"{user.mention} {MESSAGE_LEADERBOARD_NOT_FOUND}")
+            return
+
+        await channel.send(embed=self.prepare_embed(l_info=l_info, l_scores=l_scores))
+
     @app_commands.command(
         name="leaderboard",
         description="Leaderboard for on-chain activities",
     )
-    async def leaderboard(self, interaction: discord.Interaction, id: str):
+    async def leaderboard(self, interaction: discord.Interaction, leaderboard_id: str):
         logger.info(
             f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/leaderboard{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET} "
         )
-        l_info, l_scores = await actions.process_leaderboard_info_with_scores(id=id)
-
-        if l_info is None and l_scores is None:
-            await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
-            return
 
         await interaction.response.send_message(
-            embed=self.prepare_embed(
-                l_info=l_info,
-                l_scores=l_scores,
+            f"Processing leaderboard with ID {leaderboard_id}"
+        )
+
+        self.bot.loop.create_task(
+            self.background_process(
+                user=interaction.user, channel=interaction.channel, l_id=leaderboard_id
             )
         )
 

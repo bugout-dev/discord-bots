@@ -31,7 +31,7 @@ def discord_run_handler(args: argparse.Namespace) -> None:
 
 def test_handler(args: argparse.Namespace) -> None:
     l_info, l_scores = asyncio.run(
-        actions.process_leaderboard_info_with_scores(id=args.id)
+        actions.process_leaderboard_info_with_scores(l_id=args.id)
     )
 
     if l_info is not None:

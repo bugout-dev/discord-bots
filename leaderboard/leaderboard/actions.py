@@ -2,8 +2,7 @@ import asyncio
 import logging
 import re
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import aiohttp
 
@@ -65,10 +64,10 @@ async def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
 
 
 async def process_leaderboard_info_with_scores(
-    id: str,
+    l_id: str,
 ) -> Tuple[Optional[data.LeaderboardInfo], Optional[List[data.Score]]]:
     try:
-        l_id = uuid.UUID(query_input_validation(id))
+        leaderboard_id = uuid.UUID(query_input_validation(l_id))
     except QueryNotValid as e:
         logger.error(e)
         return None, None
@@ -77,7 +76,7 @@ async def process_leaderboard_info_with_scores(
         return None, None
 
     l_info, l_scores = await asyncio.gather(
-        get_leaderboard_info(l_id), get_scores(l_id)
+        get_leaderboard_info(leaderboard_id), get_scores(leaderboard_id)
     )
 
     return l_info, l_scores
