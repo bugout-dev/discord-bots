@@ -9,7 +9,7 @@ WorkingDirectory=/home/ubuntu/discord-bots/leaderboard
 EnvironmentFile=/home/ubuntu/leaderboard-secrets/app.env
 Restart=on-failure
 RestartSec=15s
-ExecStart=/home/ubuntu/leaderboard-env/bin/uvicorn discord run --config /home/ubuntu/leaderboard-secrets/config.json
+ExecStart=/home/ubuntu/leaderboard-env/bin/python -m leaderboard.cli run --config /home/ubuntu/leaderboard-secrets/config.json
 SyslogIdentifier=discord-bots-leaderboard
 
 [Install]
