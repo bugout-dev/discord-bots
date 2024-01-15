@@ -1,8 +1,8 @@
 import logging
 import re
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Tuple
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -50,7 +50,7 @@ def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
         response = requests.request(
             "GET",
             url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/?leaderboard_id={str(l_id)}&limit=10&offset=0",
-            timeout=10,
+            timeout=30,
         )
         response.raise_for_status()
     except Exception as e:
@@ -76,7 +76,7 @@ def process_leaderboard_info_with_scores(
         return l_info, l_scores
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_function = {
+        future_to_function: Dict[Future, str] = {
             executor.submit(get_leaderboard_info, l_id): "get_leaderboard_info",
             executor.submit(get_scores, l_id): "get_scores",
         }
@@ -90,6 +90,45 @@ def process_leaderboard_info_with_scores(
                     l_scores = result
 
     return l_info, l_scores
+
+
+def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
+    try:
+        response = requests.request(
+            "GET",
+            url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
+            timeout=10,
+        )
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(str(e))
+        return None
+
+    l_scores = [data.Score(**s) for s in response.json()]
+    if len(l_scores) != 1:
+        logger.error(f"Wrong number of positions: {len(l_scores)}")
+
+    return l_scores[0]
+
+
+def process_leaderboard_info_with_position(
+    l_id: uuid.UUID, address: str
+) -> Tuple[Optional[data.LeaderboardInfo], Optional[data.Score]]:
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_to_function: Dict[Future, str] = {
+            executor.submit(get_leaderboard_info, l_id): "get_leaderboard_info",
+            executor.submit(get_position, l_id, address): "get_position",
+        }
+        for future in as_completed(future_to_function):
+            func_name = future_to_function[future]
+            result = future.result()
+            if result is not None:
+                if func_name == "get_leaderboard_info":
+                    l_info = result
+                if func_name == "get_position":
+                    l_score = result
+
+    return l_info, l_score
 
 
 class TabularData:

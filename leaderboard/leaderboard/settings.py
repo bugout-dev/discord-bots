@@ -1,6 +1,6 @@
 import os
 
-LEADERBOARD_DISCORD_BOT_NAME = "leaderboard-bot"
+LEADERBOARD_DISCORD_BOT_NAME = "leaderboard"
 MOONSTREAM_URL = "https://moonstream.to"
 
 MOONSTREAM_ENGINE_API_URL = os.environ.get(

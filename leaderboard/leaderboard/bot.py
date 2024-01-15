@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import List, Optional
 
 import discord
@@ -12,6 +13,8 @@ from .settings import COLORS, LEADERBOARD_DISCORD_BOT_NAME, MOONSTREAM_URL
 logger = logging.getLogger(__name__)
 
 MESSAGE_LEADERBOARD_NOT_FOUND = "Leaderboard not found"
+MESSAGE_POSITION_NOT_FOUND = "Leaderboard position not found"
+MESSAGE_CHANNEL_NOT_FOUND = "Discord channel not found"
 
 
 def configure_intents() -> discord.flags.Intents:
@@ -22,10 +25,11 @@ def configure_intents() -> discord.flags.Intents:
 
 
 class LeaderboardDiscordBot(commands.Bot):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config: data.Config, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.available_cogs = [PingCog, LeaderboardCog]
+        self.config: data.Config = config
+        self.available_cogs = [PingCog, LeaderboardCog, PositionCog]
 
     async def on_ready(self):
         logger.info(
@@ -48,7 +52,7 @@ class LeaderboardDiscordBot(commands.Bot):
 
 
 class PingCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
     def prepare_embed(self) -> discord.Embed:
@@ -77,10 +81,10 @@ class PingCog(commands.Cog):
 
 
 class LeaderboardCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
-    def prepare_leaderboard_embed(
+    def prepare_embed(
         self,
         l_info: Optional[data.LeaderboardInfo] = None,
         l_scores: Optional[List[data.Score]] = None,
@@ -132,8 +136,64 @@ class LeaderboardCog(commands.Cog):
             return
 
         await interaction.response.send_message(
-            embed=self.prepare_leaderboard_embed(
+            embed=self.prepare_embed(
                 l_info=l_info,
                 l_scores=l_scores,
+            )
+        )
+
+
+class PositionCog(commands.Cog):
+    def __init__(self, bot: LeaderboardDiscordBot):
+        self.bot = bot
+
+    def prepare_embed(
+        self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
+    ) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"Position {f'at {l_info.title} ' if l_info is not None else ''}leaderboard",
+            description="",
+            color=discord.Color.darker_grey(),
+        )
+        embed.add_field(name="Address", value=l_score.address)
+        embed.add_field(name="Rank", value=l_score.rank)
+        embed.add_field(name="Score", value=l_score.score)
+
+        embed.add_field(
+            name="Links",
+            value=f"[Address at Starkscan](https://starkscan.co/contract/{str(l_score.address)})",
+        )
+
+        return embed
+
+    @app_commands.command(name="position", description=f"Show user results")
+    async def position(self, interaction: discord.Interaction, address: str):
+        if self.bot.config == []:
+            await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
+            return
+
+        if interaction.channel is None:
+            await interaction.response.send_message(MESSAGE_CHANNEL_NOT_FOUND)
+            return
+
+        l_id: Optional[uuid.UUID] = None
+        for th in self.bot.config.leaderboard_threads:
+            if interaction.channel.id == th.thread_id:
+                l_id = th.leaderboard_id
+        if l_id is None:
+            await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
+            return
+
+        l_info, l_score = actions.process_leaderboard_info_with_position(
+            l_id=l_id, address=address
+        )
+        if l_score is None:
+            await interaction.response.send_message(MESSAGE_POSITION_NOT_FOUND)
+            return
+
+        await interaction.response.send_message(
+            embed=self.prepare_embed(
+                l_info=l_info,
+                l_score=l_score,
             )
         )
