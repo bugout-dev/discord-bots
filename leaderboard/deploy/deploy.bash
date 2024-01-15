@@ -23,6 +23,7 @@ SCRIPT_DIR="$(realpath $(dirname $0))"
 SECRETS_DIR="${SECRETS_DIR:-/home/ubuntu/leaderboard-secrets}"
 PARAMETERS_ENV_PATH="${SECRETS_DIR}/app.env"
 CONFIG_PATH="${SECRETS_DIR}/config.json"
+USER_SYSTEMD_DIR="${USER_SYSTEMD_DIR:-/home/ubuntu/.config/systemd/user}"
 
 # Discord bots leaderboard service files
 DISCORD_BOTS_LEADERBOARD_SERVICE_FILE="discord-bots-leaderboard.service"
@@ -56,8 +57,16 @@ fi
 
 echo
 echo
+echo -e "${PREFIX_INFO} Prepare user systemd directory"
+if [ ! -d "${USER_SYSTEMD_DIR}" ]; then
+  mkdir -p "${USER_SYSTEMD_DIR}"
+  echo -e "${PREFIX_WARN} Created new user systemd directory"
+fi
+
+echo
+echo
 echo -e "${PREFIX_INFO} Replacing existing Discord leaderboard bot service definition with ${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
 chmod 644 "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
-cp "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}" "/home/ubuntu/.config/systemd/user/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
+cp "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}" "${USER_SYSTEMD_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
 XDG_RUNTIME_DIR="/run/user/1000" systemctl --user daemon-reload
 XDG_RUNTIME_DIR="/run/user/1000" systemctl --user restart --no-block "${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
