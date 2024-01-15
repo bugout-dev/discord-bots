@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord leaderboard bot service
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+WorkingDirectory=/home/ubuntu/discord-bots/leaderboard
+EnvironmentFile=/home/ubuntu/leaderboard-secrets/app.env
+Restart=on-failure
+RestartSec=15s
+ExecStart=/home/ubuntu/leaderboard-env/bin/uvicorn discord run --config /home/ubuntu/leaderboard-secrets/config.json
+SyslogIdentifier=discord-bots-leaderboard
+
+[Install]
+WantedBy=multi-user.target

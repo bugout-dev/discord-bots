@@ -33,6 +33,6 @@ setup(
         "Topic :: Software Development :: Libraries",
     ],
     url="https://github.com/moonstream-to/discord-bots/leaderboard",
-    python_requires=">=3.10",
+    python_requires=">=3.8",
     entry_points={"console_scripts": ["leaderboard=leaderboard.cli:main"]},
 )
