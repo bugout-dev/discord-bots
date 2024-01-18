@@ -59,7 +59,6 @@ class PingCog(commands.Cog):
         return discord.Embed(
             title=f"Bot ping",
             description=f"Bot {LEADERBOARD_DISCORD_BOT_NAME} ping latency is {round(self.bot.latency * 1000)}ms",
-            color=discord.Color.darker_grey(),
         )
 
     @commands.command()
@@ -107,20 +106,10 @@ class LeaderboardCog(commands.Cog):
         embed = discord.Embed(
             title=l_info.title if l_info is not None else "",
             description=description,
-            color=discord.Color.darker_grey(),
         )
-        # embed.set_thumbnail(
-        #     url="https://s3.amazonaws.com/static.simiotics.com/moonstream/assets/favicon.png"
-        # )
 
-        # 1 row
         if l_info is not None:
-            embed.add_field(
-                name="Links",
-                value=f"[Leaderboard at Moonstream.to]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l_info.id})",
-            )
-
-        # embed.set_image(url="")
+            embed.url = f"{MOONSTREAM_URL}/leaderboards/?leaderboard_id={l_info.id}"
 
         return embed
 
@@ -133,9 +122,12 @@ class LeaderboardCog(commands.Cog):
         l_info, l_scores = await actions.process_leaderboard_info_with_scores(l_id=l_id)
 
         if l_info is None and l_scores is None:
-            await channel.send(f"{user.mention} {MESSAGE_LEADERBOARD_NOT_FOUND}")
+            await channel.send(
+                embed=discord.Embed(description=MESSAGE_LEADERBOARD_NOT_FOUND)
+            )
             return
 
+        await channel.send(user.mention)
         await channel.send(embed=self.prepare_embed(l_info=l_info, l_scores=l_scores))
 
     @app_commands.command(
@@ -148,7 +140,9 @@ class LeaderboardCog(commands.Cog):
         )
 
         await interaction.response.send_message(
-            f"Processing leaderboard with ID {leaderboard_id}"
+            embed=discord.Embed(
+                description=f"Processing leaderboard with ID {leaderboard_id}"
+            )
         )
 
         self.bot.loop.create_task(
@@ -168,7 +162,6 @@ class PositionCog(commands.Cog):
         embed = discord.Embed(
             title=f"Position {f'at {l_info.title} ' if l_info is not None else ''}leaderboard",
             description="",
-            color=discord.Color.darker_grey(),
         )
         embed.add_field(name="Address", value=l_score.address)
         embed.add_field(name="Rank", value=l_score.rank)
@@ -187,11 +180,15 @@ class PositionCog(commands.Cog):
             f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/position{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET} "
         )
         if self.bot.config == []:
-            await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=MESSAGE_LEADERBOARD_NOT_FOUND)
+            )
             return
 
         if interaction.channel is None:
-            await interaction.response.send_message(MESSAGE_CHANNEL_NOT_FOUND)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=MESSAGE_CHANNEL_NOT_FOUND)
+            )
             return
 
         l_id: Optional[uuid.UUID] = None
@@ -199,14 +196,18 @@ class PositionCog(commands.Cog):
             if interaction.channel.id == th.thread_id:
                 l_id = th.leaderboard_id
         if l_id is None:
-            await interaction.response.send_message(MESSAGE_LEADERBOARD_NOT_FOUND)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=MESSAGE_LEADERBOARD_NOT_FOUND)
+            )
             return
 
         l_info, l_score = await actions.process_leaderboard_info_with_position(
             l_id=l_id, address=address
         )
         if l_score is None:
-            await interaction.response.send_message(MESSAGE_POSITION_NOT_FOUND)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=MESSAGE_POSITION_NOT_FOUND)
+            )
             return
 
         await interaction.response.send_message(
