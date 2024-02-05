@@ -5,13 +5,17 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 
-class ConfigLeaderboardThreads(BaseModel):
+class ConfigLeaderboard(BaseModel):
     leaderboard_id: uuid.UUID
-    thread_id: int
+    short_name: str
+    thread_ids: List[int] = Field(default_factory=list)
 
 
 class Config(BaseModel):
-    leaderboard_threads: List[ConfigLeaderboardThreads] = Field(default_factory=list)
+    type: str
+    discord_server_id: int
+    discord_roles: List[str] = Field(default_factory=list)
+    leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
 
 
 class LeaderboardInfo(BaseModel):

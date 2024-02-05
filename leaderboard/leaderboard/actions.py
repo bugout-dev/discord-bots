@@ -48,6 +48,7 @@ async def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}"
     )
     if response is not None:
+        logger.debug(f"Received info for leaderboard with ID: {response.get('id')}")
         l_info = data.LeaderboardInfo(**response)
     return l_info
 
