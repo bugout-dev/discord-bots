@@ -38,9 +38,7 @@ class LeaderboardDiscordBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.configs: List[
-            data.Config
-        ] = []  # TODO(kompotkot): Use same dictionary struct as in linked_users
+        self.configs: Dict[str, data.ResourceConfig] = {}
         self.linked_users: Dict[str, data.User] = {}
 
         self.available_cogs = [
@@ -133,17 +131,19 @@ class LeaderboardDiscordBot(commands.Bot):
                 },
             )
 
-            configs = [data.Config(**r.resource_data) for r in response.resources]
+            for r in response.resources:
+                try:
+                    discord_server_id = r.resource_data["discord_server_id"]
+                    self.configs[discord_server_id] = data.ResourceConfig(
+                        id=r.id, resource_data=r.resource_data
+                    )
+                except KeyError:
+                    logger.warning(f"Malformed resource with ID: {str(r.id)}")
+                    continue
+                except Exception as e:
+                    logger.error(e)
         except Exception as e:
             raise Exception(e)
-
-        self.configs = configs
-
-    async def get_server_bugout_config(self, server_id: str) -> Optional[data.Config]:
-        for c in self.configs:
-            if c.discord_server_id == server_id:
-                return c
-        return None
 
 
 class LinkLeaderboardModal(discord.ui.Modal, title="Link leaderboard to server"):
@@ -162,7 +162,7 @@ class LinkLeaderboardModal(discord.ui.Modal, title="Link leaderboard to server")
             required=True,
             placeholder="Leaderboard short name for autocomplete",
         )
-        self.th_id_input = discord.ui.TextInput(
+        self.th_ids_input = discord.ui.TextInput(
             style=discord.TextStyle.short,
             label="Discord thread ID",
             required=False,
@@ -171,7 +171,7 @@ class LinkLeaderboardModal(discord.ui.Modal, title="Link leaderboard to server")
 
         self.add_item(self.l_id_input)
         self.add_item(self.l_sn_input)
-        self.add_item(self.th_id_input)
+        self.add_item(self.th_ids_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.stop()
@@ -190,7 +190,7 @@ class ConfigureView(discord.ui.View):
 
         self.leaderboard_id: Optional[str] = None
         self.short_name: Optional[str] = None
-        self.thread_id: Optional[str] = None
+        self.thread_ids: Optional[str] = None
 
     @discord.ui.button(label="Link leaderboard")
     async def button_link_leaderboard(
@@ -201,7 +201,7 @@ class ConfigureView(discord.ui.View):
         await link_leaderboard_modal.wait()
         self.leaderboard_id = link_leaderboard_modal.l_id_input
         self.short_name = link_leaderboard_modal.l_sn_input
-        self.thread_id = link_leaderboard_modal.th_id_input
+        self.thread_ids = link_leaderboard_modal.th_ids_input
         self.stop()
 
     @discord.ui.button(label="Unlink leaderboard")
@@ -215,6 +215,23 @@ class ConfigureCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
+    async def background_process(
+        self, guild_id: int, server_config: data.ResourceConfig
+    ) -> None:
+        resource = await actions.push_server_config(
+            resource_id=server_config.id,
+            leaderboards=server_config.resource_data.leaderboards,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+            )
+            return
+
+        logger.info(
+            f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
+        )
+
     @app_commands.command(
         name="configure", description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot"
     )
@@ -223,13 +240,19 @@ class ConfigureCog(commands.Cog):
             f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/configure{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
         )
 
-        server_config = await self.bot.get_server_bugout_config(
-            server_id=interaction.guild.id
-        )
+        server_config: Optional[data.ResourceConfig] = None
+        if interaction.guild is not None:
+            server_config = self.bot.configs.get(interaction.guild.id)
+        else:
+            await interaction.response.send_message(
+                content="Could not find a guild to configure, please use command at Discord server"
+            )
+            return
+
         if server_config is not None:
             linked_leaderboards_str_list = [
                 f"{l.leaderboard_id} - {l.short_name}"
-                for l in server_config.leaderboards
+                for l in server_config.resource_data.leaderboards
             ]
 
         configure_view = ConfigureView()
@@ -239,22 +262,44 @@ class ConfigureCog(commands.Cog):
         await configure_view.wait()
 
         if server_config is not None:
-            for l in server_config.leaderboards:
+            for l in server_config.resource_data.leaderboards:
                 if l.leaderboard_id == str(configure_view.leaderboard_id):
                     await interaction.followup.send(
                         content=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked"
                     )
                     return
 
-        server_config.leaderboards.append(
+        thread_ids_str_set = set()
+        thread_ids_raw = configure_view.thread_ids
+        if thread_ids_raw is not None:
+            thread_ids_str_set = set(str(thread_ids_raw).replace(" ", "").split(","))
+        thread_ids = []
+        for x in thread_ids_str_set:
+            try:
+                thread_ids.append(int(x))
+            except Exception as e:
+                logger.warning(f"Unable to parse thread ID {x} from input to integer")
+                continue
+
+        server_config.resource_data.leaderboards.append(
             data.ConfigLeaderboard(
                 leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
                 short_name=str(configure_view.short_name),
-                thread_ids=[],
+                thread_ids=thread_ids,
             )
+        )
+        logger.info(
+            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in discord server {interaction.guild.id}"
         )
         await interaction.followup.send(
             content=f"Linked leaderboard with ID: {str(l.leaderboard_id)}"
+        )
+
+        self.bot.loop.create_task(
+            self.background_process(
+                guild_id=interaction.guild.id,
+                server_config=server_config,
+            )
         )
 
 
@@ -318,6 +363,21 @@ class UserCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
+    async def background_process(
+        self, user_id: int, new_address: data.UserAddress
+    ) -> None:
+        entity = await actions.push_user_address(
+            user_id=user_id,
+            address=new_address.address,
+            description=new_address.description,
+        )
+        if entity is None:
+            logger.error(
+                f"Unable to save entity for user with discord ID: {str(user_id)} and address: {new_address.address}"
+            )
+            return
+        logger.info(f"Saved user address as entity with ID: {entity.id}")
+
     @app_commands.command(name="user", description=f"User settings")
     async def user(self, interaction: discord.Interaction):
         logger.info(
@@ -365,10 +425,17 @@ class UserCog(commands.Cog):
 
         user.addresses.append(new_address)
         logger.info(
-            f"Added new address: {str(user_view.address_input)} by user with discord ID: {interaction.user.id}"
+            f"Added new address: {str(user_view.address_input)} by user {interaction.user} - {interaction.user.id}"
         )
         await interaction.followup.send(
             content=f"Added new address: {str(user_view.address_input)}", ephemeral=True
+        )
+
+        self.bot.loop.create_task(
+            self.background_process(
+                user_id=interaction.user.id,
+                new_address=new_address,
+            )
         )
 
 

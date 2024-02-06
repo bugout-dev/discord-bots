@@ -1,8 +1,15 @@
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class RequestMethods(Enum):
+    GET = "get"
+    POST = "post"
+    PUT = "put"
 
 
 class ConfigLeaderboard(BaseModel):
@@ -18,6 +25,22 @@ class Config(BaseModel):
     leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
 
 
+class ResourceConfig(BaseModel):
+    id: uuid.UUID
+    resource_data: Config
+
+
+class UserAddress(BaseModel):
+    address: str
+    blockchain: str
+    description: Optional[str] = None
+
+
+class User(BaseModel):
+    discord_id: int
+    addresses: List[UserAddress] = Field(default_factory=list)
+
+
 class LeaderboardInfo(BaseModel):
     id: uuid.UUID
     title: str
@@ -31,14 +54,3 @@ class Score(BaseModel):
     rank: int
     score: int
     points_data: Dict[str, Any]
-
-
-class UserAddress(BaseModel):
-    address: str
-    blockchain: str
-    description: Optional[str] = None
-
-
-class User(BaseModel):
-    discord_id: int
-    addresses: List[UserAddress] = Field(default_factory=list)

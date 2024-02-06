@@ -1,10 +1,12 @@
 import asyncio
+import json
 import logging
 import re
 import uuid
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
+from bugout.data import BugoutJournalEntity, BugoutResource
 from discord.channel import (
     CategoryChannel,
     DMChannel,
@@ -19,7 +21,14 @@ from discord.member import Member
 from discord.user import User
 
 from . import data
-from .settings import COLORS, MOONSTREAM_ENGINE_API_URL
+from .settings import (
+    BUGOUT_BROOD_URL,
+    BUGOUT_SPIRE_URL,
+    COLORS,
+    LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
+    MOONSTREAM_ENGINE_API_URL,
+    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +76,23 @@ def query_input_validation(query_input: str) -> str:
     return query_input
 
 
-async def caller_get(url: str, timeout: int = 5) -> Optional[Any]:
+async def caller(
+    url: str,
+    method: data.RequestMethods = data.RequestMethods.GET,
+    request_data: Optional[Dict[str, Any]] = None,
+    timeout: int = 5,
+) -> Optional[Any]:
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=url, timeout=timeout) as response:
+            request_method = getattr(session, method.value, session.get)
+            request_kwargs = {"url": url, "timeout": timeout}
+            if method == data.RequestMethods.POST or method == data.RequestMethods.PUT:
+                request_kwargs["json"] = request_data
+                request_kwargs["headers"] = {
+                    "Authorization": f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}",
+                    "Content-Type": "application/json",
+                }
+            async with request_method(**request_kwargs) as response:
                 response.raise_for_status()
                 json_response = await response.json()
                 return json_response
@@ -81,7 +103,7 @@ async def caller_get(url: str, timeout: int = 5) -> Optional[Any]:
 
 async def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo]:
     l_info: Optional[data.LeaderboardInfo] = None
-    response = await caller_get(
+    response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}"
     )
     if response is not None:
@@ -92,7 +114,7 @@ async def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo
 
 async def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
     l_scores: Optional[List[data.Score]] = None
-    response = await caller_get(
+    response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/?leaderboard_id={str(l_id)}&limit=10&offset=0",
         timeout=30,
     )
@@ -122,7 +144,7 @@ async def process_leaderboard_info_with_scores(
 
 async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
     l_position: Optional[data.Score] = None
-    response = await caller_get(
+    response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
     )
     if response is not None:
@@ -140,6 +162,53 @@ async def process_leaderboard_info_with_position(
     )
 
     return l_info, l_position
+
+
+async def push_user_address(
+    user_id: int,
+    address: str,
+    description: str,
+) -> Optional[BugoutJournalEntity]:
+    entity: Optional[BugoutJournalEntity] = None
+    response = await caller(
+        url=f"{BUGOUT_SPIRE_URL}/journals/{LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID}/entities",
+        method=data.RequestMethods.POST,
+        request_data={
+            "address": address,
+            "blockchain": "any",
+            "title": f"{str(user_id)} - {address[0:5]}..{address[-3:]}",
+            "required_fields": [
+                {
+                    "type": "user-link",
+                    "discord-bot": "leaderboard",
+                    "discord-user-id": user_id,
+                }
+            ],
+            "description": description,
+        },
+    )
+
+    entity = BugoutJournalEntity(**response)
+
+    return entity
+
+
+async def push_server_config(
+    resource_id: uuid.UUID, leaderboards: List[data.ConfigLeaderboard]
+) -> Optional[BugoutResource]:
+    resource: Optional[BugoutResource] = None
+    response = await caller(
+        url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
+        method=data.RequestMethods.PUT,
+        request_data={
+            "update": {"leaderboards": [json.loads(l.json()) for l in leaderboards]},
+            "drop_keys": [],
+        },
+    )
+
+    resource = BugoutResource(**response)
+
+    return resource
 
 
 class TabularData:
