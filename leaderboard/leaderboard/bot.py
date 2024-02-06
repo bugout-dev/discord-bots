@@ -1,6 +1,7 @@
+import json
 import logging
 import uuid
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import discord
 from discord import app_commands
@@ -9,14 +10,15 @@ from discord.message import Message
 
 from . import actions, data
 from .settings import (
-    COLORS,
-    MOONSTREAM_APPLICATION_ID,
-    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
-    LEADERBOARD_DISCORD_BOT_NAME,
-    MOONSTREAM_URL,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
-    bugout_client as bc,
+    COLORS,
+    LEADERBOARD_DISCORD_BOT_NAME,
+    LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
+    MOONSTREAM_APPLICATION_ID,
+    MOONSTREAM_URL,
+    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
 )
+from .settings import bugout_client as bc
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +38,17 @@ class LeaderboardDiscordBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.configs: List[data.Config] = []
+        self.configs: List[
+            data.Config
+        ] = []  # TODO(kompotkot): Use same dictionary struct as in linked_users
+        self.linked_users: Dict[str, data.User] = {}
+
         self.available_cogs = [
             PingCog,
             LeaderboardCog,
             PositionCog,
             ConfigureCog,
-            AccountCog,
+            UserCog,
         ]
 
     async def on_ready(self):
@@ -58,17 +64,64 @@ class LeaderboardDiscordBot(commands.Bot):
         logger.info(f"Slash commands synced: {len(synced)}")
 
     async def on_message(self, message: Message):
-        print("wtf", message.guild.id)
-        config = await self.get_server_bugout_config(message.guild.id)
-        if config is not None:
-            print(config.discord_roles)
+        if message.guild is not None:
+            if message.guild.owner == message.author:
+                print("Owner is speaking")
 
         logger.debug(
-            f"{COLORS.GREEN}[MESSAGE]{COLORS.RESET} Guild: {COLORS.BLUE}{message.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{message.channel}{COLORS.RESET}"
-            f"Author: {COLORS.BLUE}{message.author}{COLORS.RESET} Content: {message.content}"
+            actions.prepare_log_message(
+                "-",
+                "MESSAGE",
+                message.author,
+                message.guild,
+                message.channel,
+            )
         )
 
         await self.process_commands(message)
+
+    def load_bugout_users(self) -> None:
+        try:
+            response = bc.search(
+                token=MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+                journal_id=LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
+                query="tag:type:user-link",
+                limit=100,
+                content=True,
+                representation="entity",
+            )
+            logger.info(f"Fetched configuration of {response.total_results} users")
+            for rec in response.results:
+                try:
+                    user_discord_id = int(
+                        list(
+                            filter(
+                                lambda x: x.get("discord-user-id") is not None,
+                                rec.required_fields,
+                            )
+                        )[0]["discord-user-id"]
+                    )
+                    user = self.linked_users[user_discord_id]
+                except KeyError:
+                    user = data.User(
+                        discord_id=user_discord_id,
+                        addresses=[],
+                    )
+                    self.linked_users[user_discord_id] = user
+                except Exception:
+                    logger.error(f"Wrong format of entity: {rec.entity_url}")
+                    continue
+
+                user.addresses.append(
+                    data.UserAddress(
+                        address=rec.address,
+                        blockchain=rec.blockchain,
+                        description=rec.secondary_fields.get("description"),
+                    )
+                )
+
+        except Exception as e:
+            raise Exception(e)
 
     def load_bugout_configs(self) -> None:
         try:
@@ -185,35 +238,137 @@ class ConfigureCog(commands.Cog):
         )
         await configure_view.wait()
 
-        is_linked = False
         if server_config is not None:
             for l in server_config.leaderboards:
-                if l.leaderboard_id == configure_view.leaderboard_id:
-                    is_linked = True
-                    print("Leaderboard already linked")
+                if l.leaderboard_id == str(configure_view.leaderboard_id):
+                    await interaction.followup.send(
+                        content=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked"
+                    )
+                    return
 
-        if is_linked is False:
-            server_config.leaderboards.append(
-                data.ConfigLeaderboard(
-                    leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
-                    short_name=str(configure_view.short_name),
-                    thread_ids=[],
-                )
+        server_config.leaderboards.append(
+            data.ConfigLeaderboard(
+                leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
+                short_name=str(configure_view.short_name),
+                thread_ids=[],
             )
-            print("Linked new leaderboard")
+        )
+        await interaction.followup.send(
+            content=f"Linked leaderboard with ID: {str(l.leaderboard_id)}"
+        )
 
 
-class AccountCog(commands.Cog):
+class AddNewAddressModal(discord.ui.Modal, title="Add new address for user"):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.a_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            label="Blockchain address",
+            required=True,
+            placeholder="0x...",
+        )
+        self.d_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            label="Address short description",
+            required=True,
+            placeholder="My main address",
+        )
+
+        self.add_item(self.a_input)
+        self.add_item(self.d_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        await interaction.response.defer()
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
+        self.stop()
+        await interaction.response.send_message(content="Error!")
+
+
+class UserView(discord.ui.View):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.address_input: Optional[str] = None
+        self.description_input: Optional[str] = None
+
+    @discord.ui.button(label="Add new address")
+    async def button_add_new_address(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        add_new_address_modal = AddNewAddressModal()
+        await interaction.response.send_modal(add_new_address_modal)
+        await add_new_address_modal.wait()
+        self.address_input = add_new_address_modal.a_input
+        self.description_input = add_new_address_modal.d_input
+        self.stop()
+
+    @discord.ui.button(label="Delete address")
+    async def button_delete_address(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.send_message(content="Delete address pressed")
+
+
+class UserCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
-    @app_commands.command(name="account", description=f"Account settings")
-    async def account(self, interaction: discord.Interaction):
+    @app_commands.command(name="user", description=f"User settings")
+    async def user(self, interaction: discord.Interaction):
         logger.info(
-            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/account{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "/user",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
         )
+
+        user: Optional[data.User] = None
+        if interaction.user.id in self.bot.linked_users:
+            user = self.bot.linked_users[interaction.user.id]
+
+        content = "Unknown user"
+        if user is not None:
+            address = [f"{a.address} - {a.description}" for a in user.addresses]
+            content = "\n".join(address)
+
+        user_view = UserView()
         await interaction.response.send_message(
-            content="Account here", view=ConfigureView()
+            content=content, view=user_view, ephemeral=True
+        )
+        await user_view.wait()
+
+        if user is None:
+            user = data.User(discord_id=interaction.user.id, addresses=[])
+            self.bot.linked_users[interaction.user.id] = user
+
+        if str(user_view.address_input).lower() not in [
+            a.address.lower() for a in user.addresses
+        ]:
+            new_address = data.UserAddress(
+                address=str(user_view.address_input),
+                blockchain="any",
+                description=str(user_view.description_input),
+            )
+        else:
+            await interaction.followup.send(
+                content="Address already attached to your profile", ephemeral=True
+            )
+            return
+
+        user.addresses.append(new_address)
+        logger.info(
+            f"Added new address: {str(user_view.address_input)} by user with discord ID: {interaction.user.id}"
+        )
+        await interaction.followup.send(
+            content=f"Added new address: {str(user_view.address_input)}", ephemeral=True
         )
 
 
@@ -230,7 +385,9 @@ class PingCog(commands.Cog):
     @commands.command()
     async def ping(self, ctx: commands.Context):
         logger.info(
-            f"{COLORS.GREEN}[COMMAND]{COLORS.RESET} {COLORS.BLUE}/ping{COLORS.RESET} Guild: {COLORS.BLUE}{ctx.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{ctx.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "ping", "COMMAND", ctx.author, ctx.guild, ctx.channel
+            )
         )
         await ctx.send(embed=self.prepare_embed())
 
@@ -240,7 +397,13 @@ class PingCog(commands.Cog):
     )
     async def _ping(self, interaction: discord.Interaction):
         logger.info(
-            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/ping{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "/ping",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
         )
         await interaction.response.send_message(embed=self.prepare_embed())
 
@@ -302,7 +465,13 @@ class LeaderboardCog(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction, id: str):
         logger.info(
-            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/leaderboard{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "/leaderboard",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
         )
 
         await interaction.response.send_message(
@@ -359,8 +528,15 @@ class PositionCog(commands.Cog):
     @app_commands.command(name="position", description=f"Show user results")
     async def position(self, interaction: discord.Interaction, address: str):
         logger.info(
-            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/position{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "/position",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
         )
+
         server_config = await self.bot.get_server_bugout_config(
             server_id=interaction.guild.id
         )

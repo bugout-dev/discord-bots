@@ -2,12 +2,24 @@ import asyncio
 import logging
 import re
 import uuid
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 import aiohttp
+from discord.channel import (
+    CategoryChannel,
+    DMChannel,
+    ForumChannel,
+    GroupChannel,
+    StageChannel,
+    TextChannel,
+    VoiceChannel,
+)
+from discord.guild import Guild
+from discord.member import Member
+from discord.user import User
 
 from . import data
-from .settings import MOONSTREAM_ENGINE_API_URL
+from .settings import COLORS, MOONSTREAM_ENGINE_API_URL
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +30,31 @@ class QueryNotValid(Exception):
     """
     Raised when query validation not passed.
     """
+
+
+def prepare_log_message(
+    action: str,
+    action_type: str,
+    user: Optional[Union[User, Member]] = None,
+    guild: Optional[Guild] = None,
+    channel: Optional[
+        Union[
+            VoiceChannel,
+            StageChannel,
+            TextChannel,
+            ForumChannel,
+            CategoryChannel,
+            DMChannel,
+            GroupChannel,
+        ]
+    ] = None,
+) -> str:
+    msg = f"{COLORS.GREEN}[{action_type}]{COLORS.RESET} {COLORS.BLUE}{action}{COLORS.RESET}"
+    if user is not None:
+        msg += f" User: {COLORS.BLUE}{f'{user} - {user.id}' if user is not None else user}{COLORS.RESET}"
+    msg += f" Guild: {COLORS.BLUE}{f'{guild} - {guild.id}' if guild is not None else guild}{COLORS.RESET} Channel: {COLORS.BLUE}{f'{channel} - {channel.id}' if channel is not None else channel}{COLORS.RESET}"
+
+    return msg
 
 
 def query_input_validation(query_input: str) -> str:

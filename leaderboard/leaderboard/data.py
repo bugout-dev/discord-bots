@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,3 +31,14 @@ class Score(BaseModel):
     rank: int
     score: int
     points_data: Dict[str, Any]
+
+
+class UserAddress(BaseModel):
+    address: str
+    blockchain: str
+    description: Optional[str] = None
+
+
+class User(BaseModel):
+    discord_id: int
+    addresses: List[UserAddress] = Field(default_factory=list)
