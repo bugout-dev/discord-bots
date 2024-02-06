@@ -1,9 +1,10 @@
 import json
 import logging
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import discord
+from bugout.data import BugoutSearchResult, BugoutSearchResultAsEntity
 from discord import app_commands
 from discord.ext import commands
 from discord.message import Message
@@ -38,8 +39,8 @@ class LeaderboardDiscordBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.configs: Dict[str, data.ResourceConfig] = {}
-        self.linked_users: Dict[str, data.User] = {}
+        self.server_configs: Dict[int, data.ResourceConfig] = {}
+        self.linked_users: Dict[int, data.User] = {}
 
         self.available_cogs = [
             PingCog,
@@ -89,7 +90,8 @@ class LeaderboardDiscordBot(commands.Bot):
                 representation="entity",
             )
             logger.info(f"Fetched configuration of {response.total_results} users")
-            for rec in response.results:
+            results: List[BugoutSearchResultAsEntity] = response.results  # type: ignore
+            for rec in results:
                 try:
                     user_discord_id = int(
                         list(
@@ -112,9 +114,9 @@ class LeaderboardDiscordBot(commands.Bot):
 
                 user.addresses.append(
                     data.UserAddress(
-                        address=rec.address,
-                        blockchain=rec.blockchain,
-                        description=rec.secondary_fields.get("description"),
+                        address=str(rec.address),
+                        blockchain=str(rec.blockchain),
+                        description=rec.secondary_fields.get("description", ""),
                     )
                 )
 
@@ -134,8 +136,8 @@ class LeaderboardDiscordBot(commands.Bot):
             for r in response.resources:
                 try:
                     discord_server_id = r.resource_data["discord_server_id"]
-                    self.configs[discord_server_id] = data.ResourceConfig(
-                        id=r.id, resource_data=r.resource_data
+                    self.server_configs[discord_server_id] = data.ResourceConfig(
+                        id=r.id, resource_data=data.Config(**r.resource_data)
                     )
                 except KeyError:
                     logger.warning(f"Malformed resource with ID: {str(r.id)}")
@@ -176,12 +178,6 @@ class LinkLeaderboardModal(discord.ui.Modal, title="Link leaderboard to server")
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.stop()
         await interaction.response.defer()
-
-    async def on_error(
-        self, interaction: discord.Interaction, error: Exception
-    ) -> None:
-        self.stop()
-        await interaction.response.send_message(content="Error!")
 
 
 class ConfigureView(discord.ui.View):
@@ -242,7 +238,7 @@ class ConfigureCog(commands.Cog):
 
         server_config: Optional[data.ResourceConfig] = None
         if interaction.guild is not None:
-            server_config = self.bot.configs.get(interaction.guild.id)
+            server_config = self.bot.server_configs.get(interaction.guild.id)
         else:
             await interaction.response.send_message(
                 content="Could not find a guild to configure, please use command at Discord server"
@@ -254,6 +250,16 @@ class ConfigureCog(commands.Cog):
                 f"{l.leaderboard_id} - {l.short_name}"
                 for l in server_config.resource_data.leaderboards
             ]
+        else:
+            server_config = data.ResourceConfig(
+                id=uuid.uuid4(),
+                resource_data=data.Config(
+                    type=BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
+                    discord_server_id=interaction.guild.id,
+                    discord_roles=[],
+                    leaderboards=[],
+                ),
+            )
 
         configure_view = ConfigureView()
         await interaction.response.send_message(
@@ -326,12 +332,6 @@ class AddNewAddressModal(discord.ui.Modal, title="Add new address for user"):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.stop()
         await interaction.response.defer()
-
-    async def on_error(
-        self, interaction: discord.Interaction, error: Exception
-    ) -> None:
-        self.stop()
-        await interaction.response.send_message(content="Error!")
 
 
 class UserView(discord.ui.View):
@@ -511,8 +511,8 @@ class LeaderboardCog(commands.Cog):
 
     async def background_process(
         self,
-        user: discord.user.User,
-        channel: discord.channel.TextChannel,
+        user: Any,
+        channel: Any,
         l_id: str,
     ):
         l_info, l_scores = await actions.process_leaderboard_info_with_scores(l_id=l_id)
@@ -555,19 +555,23 @@ class LeaderboardCog(commands.Cog):
     async def leaderboard_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
-        data = []
-        server_config = await self.bot.get_server_bugout_config(
-            server_id=interaction.guild.id
-        )
+        autocompletion: List[app_commands.Choice[str]] = []
+
+        server_config: Optional[data.ResourceConfig] = None
+        if interaction.guild is not None:
+            server_config = self.bot.server_configs.get(interaction.guild.id)
+        else:
+            return autocompletion
+
         if server_config is not None:
-            for l in server_config.leaderboards:
+            for l in server_config.resource_data.leaderboards:
                 if current.lower() in l.short_name.lower():
-                    data.append(
+                    autocompletion.append(
                         app_commands.Choice(
                             name=l.short_name, value=str(l.leaderboard_id)
                         )
                     )
-        return data
+        return autocompletion
 
 
 class PositionCog(commands.Cog):
@@ -604,9 +608,14 @@ class PositionCog(commands.Cog):
             )
         )
 
-        server_config = await self.bot.get_server_bugout_config(
-            server_id=interaction.guild.id
-        )
+        server_config: Optional[data.ResourceConfig] = None
+        if interaction.guild is not None:
+            server_config = self.bot.server_configs.get(interaction.guild.id)
+        else:
+            await interaction.response.send_message(
+                content="Could not find a guild, please use command at Discord server"
+            )
+            return
 
         if server_config is None:
             await interaction.response.send_message(
@@ -621,7 +630,7 @@ class PositionCog(commands.Cog):
             return
 
         l_id: Optional[uuid.UUID] = None
-        for l in server_config.leaderboards:
+        for l in server_config.resource_data.leaderboards:
             for t in l.thread_ids:
                 if interaction.channel.id == t:
                     l_id = l.leaderboard_id

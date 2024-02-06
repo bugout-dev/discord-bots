@@ -7,15 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
 from bugout.data import BugoutJournalEntity, BugoutResource
-from discord.channel import (
-    CategoryChannel,
-    DMChannel,
-    ForumChannel,
-    GroupChannel,
-    StageChannel,
-    TextChannel,
-    VoiceChannel,
-)
 from discord.guild import Guild
 from discord.member import Member
 from discord.user import User
@@ -46,17 +37,7 @@ def prepare_log_message(
     action_type: str,
     user: Optional[Union[User, Member]] = None,
     guild: Optional[Guild] = None,
-    channel: Optional[
-        Union[
-            VoiceChannel,
-            StageChannel,
-            TextChannel,
-            ForumChannel,
-            CategoryChannel,
-            DMChannel,
-            GroupChannel,
-        ]
-    ] = None,
+    channel: Optional[Any] = None,
 ) -> str:
     msg = f"{COLORS.GREEN}[{action_type}]{COLORS.RESET} {COLORS.BLUE}{action}{COLORS.RESET}"
     if user is not None:
@@ -85,14 +66,14 @@ async def caller(
     try:
         async with aiohttp.ClientSession() as session:
             request_method = getattr(session, method.value, session.get)
-            request_kwargs = {"url": url, "timeout": timeout}
+            request_kwargs: Dict[str, Any] = {"timeout": timeout}
             if method == data.RequestMethods.POST or method == data.RequestMethods.PUT:
                 request_kwargs["json"] = request_data
                 request_kwargs["headers"] = {
                     "Authorization": f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}",
                     "Content-Type": "application/json",
                 }
-            async with request_method(**request_kwargs) as response:
+            async with request_method(url, **request_kwargs) as response:
                 response.raise_for_status()
                 json_response = await response.json()
                 return json_response
@@ -188,7 +169,8 @@ async def push_user_address(
         },
     )
 
-    entity = BugoutJournalEntity(**response)
+    if response is not None:
+        entity = BugoutJournalEntity(**response)
 
     return entity
 
@@ -206,7 +188,8 @@ async def push_server_config(
         },
     )
 
-    resource = BugoutResource(**response)
+    if response is not None:
+        resource = BugoutResource(**response)
 
     return resource
 

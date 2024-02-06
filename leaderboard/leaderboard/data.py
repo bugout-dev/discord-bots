@@ -33,7 +33,7 @@ class ResourceConfig(BaseModel):
 class UserAddress(BaseModel):
     address: str
     blockchain: str
-    description: Optional[str] = None
+    description: str
 
 
 class User(BaseModel):
