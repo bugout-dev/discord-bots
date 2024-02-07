@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
 from bugout.data import BugoutJournalEntity, BugoutResource
+from discord import Embed
 from discord.guild import Guild
 from discord.member import Member
 from discord.user import User
@@ -55,6 +56,19 @@ def query_input_validation(query_input: str) -> str:
         raise QueryNotValid("Query contains restricted symbols")
 
     return query_input
+
+
+def prepare_dynamic_embed(
+    title: str, description: str, fields: List[Dict[str, str]] = []
+) -> Embed:
+    embed = Embed(
+        title=title,
+        description=description,
+    )
+    for f in fields:
+        embed.add_field(name=f["field_name"], value=f["field_value"])
+
+    return embed
 
 
 async def caller(

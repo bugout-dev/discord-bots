@@ -263,7 +263,9 @@ class ConfigureCog(commands.Cog):
         for l in server_config.resource_data.leaderboards:
             if str(l.leaderboard_id) == str(configure_view.leaderboard_id):
                 await interaction.followup.send(
-                    content=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked"
+                    embed=discord.Embed(
+                        description=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked to this Discord server"
+                    ),
                 )
                 return
 
@@ -287,10 +289,27 @@ class ConfigureCog(commands.Cog):
             )
         )
         logger.info(
-            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in discord server {guild_id}"
+            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in Discord server {guild_id}"
         )
         await interaction.followup.send(
-            content=f"Linked leaderboard with ID: {str(l.leaderboard_id)}"
+            embed=actions.prepare_dynamic_embed(
+                title="New leaderboard to Discord server",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Leaderboard ID",
+                        "field_value": str(l.leaderboard_id),
+                    },
+                    {
+                        "field_name": "Short name",
+                        "field_value": str(configure_view.short_name),
+                    },
+                    {
+                        "field_name": "Threads",
+                        "field_value": ", ".join([str(i) for i in thread_ids]),
+                    },
+                ],
+            ),
         )
 
         self.bot.loop.create_task(
@@ -318,7 +337,9 @@ class ConfigureCog(commands.Cog):
 
         if is_unlink is False:
             await interaction.followup.send(
-                content=f"Leaderboard with ID: {str(configure_view.unlink_leaderboard_id)} not found in linked"
+                embed=discord.Embed(
+                    description=f"Leaderboard with ID: {str(configure_view.unlink_leaderboard_id)} not found in linked to this Discord server"
+                ),
             )
             return
 
@@ -330,7 +351,16 @@ class ConfigureCog(commands.Cog):
             f"Unlinked leaderboard with ID: {str(configure_view.unlink_leaderboard_id)} from Discord server with ID: {guild_id}"
         )
         await interaction.followup.send(
-            content=f"Unlinked leaderboard with ID: {str(l.leaderboard_id)}"
+            embed=actions.prepare_dynamic_embed(
+                title="Unlinked leaderboard from Discord server",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Leaderboard ID",
+                        "field_value": str(configure_view.unlink_leaderboard_id),
+                    },
+                ],
+            ),
         )
 
         self.bot.loop.create_task(
@@ -359,13 +389,27 @@ class ConfigureCog(commands.Cog):
             server_config = self.bot.server_configs.get(interaction.guild.id)
         else:
             await interaction.response.send_message(
-                content="Could not find a guild to configure, please use command at Discord server"
+                embed=discord.Embed(
+                    description="Could not find a guild to configure, please use command at Discord server"
+                )
             )
+
             return
 
+        linked_leaderboards: List[List[Any]] = []
         if server_config is not None:
-            linked_leaderboards_str_list = [
-                f"{l.leaderboard_id} - {l.short_name}"
+            linked_leaderboards = [
+                [
+                    {
+                        "field_name": "Leaderboard ID",
+                        "field_value": str(l.leaderboard_id),
+                    },
+                    {
+                        "field_name": "Short name",
+                        "field_value": l.short_name,
+                    },
+                    {"field_name": "Thread IDs", "field_value": l.thread_ids},
+                ]
                 for l in server_config.resource_data.leaderboards
             ]
         else:
@@ -381,7 +425,13 @@ class ConfigureCog(commands.Cog):
 
         configure_view = ConfigureView()
         await interaction.response.send_message(
-            content="\n".join(linked_leaderboards_str_list), view=configure_view
+            embed=actions.prepare_dynamic_embed(
+                title="New address linked to Discord account",
+                description="",
+                fields=[f for l in linked_leaderboards for f in l],
+            ),
+            view=configure_view,
+            ephemeral=True,
         )
         await configure_view.wait()
 
@@ -532,7 +582,10 @@ class UserCog(commands.Cog):
             )
         else:
             await interaction.followup.send(
-                content="Address already attached to your profile", ephemeral=True
+                embed=discord.Embed(
+                    description="Address already attached to your profile"
+                ),
+                ephemeral=True,
             )
             return
 
@@ -540,8 +593,23 @@ class UserCog(commands.Cog):
         logger.info(
             f"Added new address: {str(user_view.address_input)} by user {interaction.user} - {interaction.user.id}"
         )
+
         await interaction.followup.send(
-            content=f"Added new address: {str(user_view.address_input)}", ephemeral=True
+            embed=actions.prepare_dynamic_embed(
+                title="New address linked to Discord account",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Address",
+                        "field_value": str(user_view.address_input),
+                    },
+                    {
+                        "field_name": "Short description",
+                        "field_value": str(user_view.description_input),
+                    },
+                ],
+            ),
+            ephemeral=True,
         )
 
         self.bot.loop.create_task(
@@ -559,7 +627,8 @@ class UserCog(commands.Cog):
     ) -> None:
         if user is None:
             await interaction.followup.send(
-                content=f"User does not have set addresses", ephemeral=True
+                embed=discord.Embed(description="User does not have set addresses"),
+                ephemeral=True,
             )
             return
 
@@ -574,7 +643,9 @@ class UserCog(commands.Cog):
 
         if entity_id_to_remove is None:
             await interaction.followup.send(
-                content=f"Address: {str(user_view.remove_address_input)} not found in user addresses"
+                embed=discord.Embed(
+                    description=f"Address: {str(user_view.remove_address_input)} not found in user addresses"
+                ),
             )
             return
 
@@ -585,8 +656,19 @@ class UserCog(commands.Cog):
         logger.info(
             f"Removed address: {str(user_view.remove_address_input)} from user addresses"
         )
+
         await interaction.followup.send(
-            content=f"Removed address: {str(user_view.remove_address_input)}"
+            embed=actions.prepare_dynamic_embed(
+                title="Unlinked address from Discord account",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Address",
+                        "field_value": str(user_view.remove_address_input),
+                    }
+                ],
+            ),
+            ephemeral=True,
         )
 
         self.bot.loop.create_task(
@@ -612,14 +694,32 @@ class UserCog(commands.Cog):
         if interaction.user.id in self.bot.linked_users:
             user = self.bot.linked_users[interaction.user.id]
 
-        content = "Unknown user"
+        address = []
         if user is not None:
-            address = [f"{a.address} - {a.description}" for a in user.addresses]
-            content = "\n".join(address)
+            address = [
+                [
+                    {
+                        "field_name": "Address",
+                        "field_value": a.address,
+                    },
+                    {
+                        "field_name": "Short description",
+                        "field_value": a.description,
+                    },
+                    {"field_name": "\u200B", "field_value": "\u200B"},
+                ]
+                for a in user.addresses
+            ]
 
         user_view = UserView()
         await interaction.response.send_message(
-            content=content, view=user_view, ephemeral=True
+            embed=actions.prepare_dynamic_embed(
+                title="Addresses linked to current Discord user",
+                description="",
+                fields=[f for d in address for f in d],
+            ),
+            view=user_view,
+            ephemeral=True,
         )
         await user_view.wait()
 
@@ -866,7 +966,9 @@ class PositionCog(commands.Cog):
             server_config = self.bot.server_configs.get(interaction.guild.id)
         else:
             await interaction.response.send_message(
-                content="Could not find a guild, please use command at Discord server"
+                embed=discord.Embed(
+                    description="Could not find a guild, please use command at Discord server"
+                )
             )
             return
 
@@ -892,20 +994,22 @@ class PositionCog(commands.Cog):
         if len(leaderboards) == 1:
             leaderboard_id = leaderboards[0].leaderboard_id
             await interaction.response.send_message(
-                content=f"Processing {leaderboards[0].short_name} leaderboard",
+                embed=discord.Embed(
+                    description=f"Looking for {address} in leaderboard: {leaderboards[0].short_name}"
+                ),
                 ephemeral=True,
             )
-        if len(leaderboards) > 1:
+        elif len(leaderboards) > 1:
             leaderboard_select_view = LeaderboardSelectView(leaderboards)
-
             await interaction.response.send_message(
-                content="There multiple leaderboards, pleas select one",
+                embed=discord.Embed(
+                    description="There multiple leaderboards, pleas select one"
+                ),
                 view=leaderboard_select_view,
                 ephemeral=True,
             )
             await leaderboard_select_view.wait()
             leaderboard_id = uuid.UUID(leaderboard_select_view.leaderboard_id)
-
         else:
             await interaction.response.send_message(
                 embed=discord.Embed(description=MESSAGE_LEADERBOARD_NOT_FOUND)
