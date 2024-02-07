@@ -61,18 +61,20 @@ async def caller(
     url: str,
     method: data.RequestMethods = data.RequestMethods.GET,
     request_data: Optional[Dict[str, Any]] = None,
+    is_auth: bool = False,
     timeout: int = 5,
 ) -> Optional[Any]:
     try:
         async with aiohttp.ClientSession() as session:
             request_method = getattr(session, method.value, session.get)
-            request_kwargs: Dict[str, Any] = {"timeout": timeout}
+            request_kwargs: Dict[str, Any] = {"timeout": timeout, "headers": {}}
             if method == data.RequestMethods.POST or method == data.RequestMethods.PUT:
                 request_kwargs["json"] = request_data
-                request_kwargs["headers"] = {
-                    "Authorization": f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}",
-                    "Content-Type": "application/json",
-                }
+                request_kwargs["headers"]["Content-Type"] = "application/json"
+            if is_auth is True:
+                request_kwargs["headers"][
+                    "Authorization"
+                ] = f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}"
             async with request_method(url, **request_kwargs) as response:
                 response.raise_for_status()
                 json_response = await response.json()
@@ -167,12 +169,27 @@ async def push_user_address(
             ],
             "description": description,
         },
+        is_auth=True,
     )
 
     if response is not None:
         entity = BugoutJournalEntity(**response)
 
     return entity
+
+
+async def remove_user_address(entity_id: uuid.UUID) -> Optional[uuid.UUID]:
+    removed_entry_id: Optional[uuid.UUID] = None
+    response = await caller(
+        url=f"{BUGOUT_SPIRE_URL}/journals/{LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID}/entities/{str(entity_id)}",
+        method=data.RequestMethods.DELETE,
+        is_auth=True,
+    )
+
+    if response is not None:
+        removed_entry_id = uuid.UUID(response["id"])
+
+    return removed_entry_id
 
 
 async def push_server_config(
@@ -186,6 +203,7 @@ async def push_server_config(
             "update": {"leaderboards": [json.loads(l.json()) for l in leaderboards]},
             "drop_keys": [],
         },
+        is_auth=True,
     )
 
     if response is not None:

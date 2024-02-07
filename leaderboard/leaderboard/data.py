@@ -10,6 +10,7 @@ class RequestMethods(Enum):
     GET = "get"
     POST = "post"
     PUT = "put"
+    DELETE = "delete"
 
 
 class ConfigLeaderboard(BaseModel):
@@ -31,6 +32,7 @@ class ResourceConfig(BaseModel):
 
 
 class UserAddress(BaseModel):
+    entity_id: Optional[uuid.UUID] = None
     address: str
     blockchain: str
     description: str

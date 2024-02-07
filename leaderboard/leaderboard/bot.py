@@ -52,7 +52,7 @@ class LeaderboardDiscordBot(commands.Bot):
 
     async def on_ready(self):
         logger.info(
-            f"Logged in {COLORS.BLUE}{str(len(self.guilds))}{COLORS.RESET} guilds on as {COLORS.BLUE}{self.user}{COLORS.RESET}"
+            f"Logged in {COLORS.BLUE}{str(len(self.guilds))}{COLORS.RESET} guilds on as {COLORS.BLUE}{self.user} - {self.user.id}{COLORS.RESET}"
         )
 
     async def setup_hook(self):
@@ -112,8 +112,10 @@ class LeaderboardDiscordBot(commands.Bot):
                     logger.error(f"Wrong format of entity: {rec.entity_url}")
                     continue
 
+                entity_id_raw = rec.entity_url.rstrip("/").split("/")[-1]
                 user.addresses.append(
                     data.UserAddress(
+                        entity_id=uuid.UUID(entity_id_raw),
                         address=str(rec.address),
                         blockchain=str(rec.blockchain),
                         description=rec.secondary_fields.get("description", ""),
@@ -180,6 +182,23 @@ class LinkLeaderboardModal(discord.ui.Modal, title="Link leaderboard to server")
         await interaction.response.defer()
 
 
+class UnlinkLeaderboardModal(discord.ui.Modal, title="Unlink leaderboard"):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.u_l_id_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            label="Leaderboard ID",
+            required=True,
+            placeholder="Leaderboard identification number in UUID format",
+        )
+        self.add_item(self.u_l_id_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        await interaction.response.defer()
+
+
 class ConfigureView(discord.ui.View):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -187,6 +206,8 @@ class ConfigureView(discord.ui.View):
         self.leaderboard_id: Optional[str] = None
         self.short_name: Optional[str] = None
         self.thread_ids: Optional[str] = None
+
+        self.unlink_leaderboard_id: Optional[str] = None
 
     @discord.ui.button(label="Link leaderboard")
     async def button_link_leaderboard(
@@ -204,14 +225,18 @@ class ConfigureView(discord.ui.View):
     async def button_unlink_leaderboard(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        await interaction.response.send_message(content="Unlink leaderboard pressed")
+        unlink_leaderboard_modal = UnlinkLeaderboardModal()
+        await interaction.response.send_modal(unlink_leaderboard_modal)
+        await unlink_leaderboard_modal.wait()
+        self.unlink_leaderboard_id = unlink_leaderboard_modal.u_l_id_input
+        self.stop()
 
 
 class ConfigureCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
-    async def background_process(
+    async def background_process_configure(
         self, guild_id: int, server_config: data.ResourceConfig
     ) -> None:
         resource = await actions.push_server_config(
@@ -228,12 +253,105 @@ class ConfigureCog(commands.Cog):
             f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
         )
 
+    async def handle_link_new_leaderboard(
+        self,
+        server_config: data.ResourceConfig,
+        configure_view: ConfigureView,
+        interaction: discord.Interaction,
+        guild_id: int,
+    ) -> None:
+        for l in server_config.resource_data.leaderboards:
+            if str(l.leaderboard_id) == str(configure_view.leaderboard_id):
+                await interaction.followup.send(
+                    content=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked"
+                )
+                return
+
+        thread_ids_str_set = set()
+        thread_ids_raw = configure_view.thread_ids
+        if thread_ids_raw is not None:
+            thread_ids_str_set = set(str(thread_ids_raw).replace(" ", "").split(","))
+        thread_ids = []
+        for x in thread_ids_str_set:
+            try:
+                thread_ids.append(int(x))
+            except Exception as e:
+                logger.warning(f"Unable to parse thread ID {x} from input to integer")
+                continue
+
+        server_config.resource_data.leaderboards.append(
+            data.ConfigLeaderboard(
+                leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
+                short_name=str(configure_view.short_name),
+                thread_ids=thread_ids,
+            )
+        )
+        logger.info(
+            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in discord server {guild_id}"
+        )
+        await interaction.followup.send(
+            content=f"Linked leaderboard with ID: {str(l.leaderboard_id)}"
+        )
+
+        self.bot.loop.create_task(
+            self.background_process_configure(
+                guild_id=guild_id,
+                server_config=server_config,
+            )
+        )
+
+    async def handle_unlink_leaderboard(
+        self,
+        server_config: data.ResourceConfig,
+        configure_view: ConfigureView,
+        interaction: discord.Interaction,
+        guild_id: int,
+    ) -> None:
+        is_unlink = False
+        leaderboards: List[data.ConfigLeaderboard] = []
+        for l in server_config.resource_data.leaderboards:
+            if str(l.leaderboard_id) == str(configure_view.unlink_leaderboard_id):
+                is_unlink = True
+                continue
+
+            leaderboards.append(l)
+
+        if is_unlink is False:
+            await interaction.followup.send(
+                content=f"Leaderboard with ID: {str(configure_view.unlink_leaderboard_id)} not found in linked"
+            )
+            return
+
+        server_config.resource_data.leaderboards.clear()
+        server_config.resource_data.leaderboards = leaderboards
+        self.bot.server_configs[guild_id] = server_config
+
+        logger.info(
+            f"Unlinked leaderboard with ID: {str(configure_view.unlink_leaderboard_id)} from Discord server with ID: {guild_id}"
+        )
+        await interaction.followup.send(
+            content=f"Unlinked leaderboard with ID: {str(l.leaderboard_id)}"
+        )
+
+        self.bot.loop.create_task(
+            self.background_process_configure(
+                guild_id=guild_id,
+                server_config=server_config,
+            )
+        )
+
     @app_commands.command(
         name="configure", description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot"
     )
     async def configure(self, interaction: discord.Interaction):
         logger.info(
-            f"{COLORS.GREEN}[SLASH COMMAND]{COLORS.RESET} {COLORS.BLUE}/configure{COLORS.RESET} Guild: {COLORS.BLUE}{interaction.guild}{COLORS.RESET} Channel: {COLORS.BLUE}{interaction.channel}{COLORS.RESET}"
+            actions.prepare_log_message(
+                "/configure",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
         )
 
         server_config: Optional[data.ResourceConfig] = None
@@ -267,46 +385,23 @@ class ConfigureCog(commands.Cog):
         )
         await configure_view.wait()
 
-        if server_config is not None:
-            for l in server_config.resource_data.leaderboards:
-                if l.leaderboard_id == str(configure_view.leaderboard_id):
-                    await interaction.followup.send(
-                        content=f"Leaderboard with ID: {str(l.leaderboard_id)} already linked"
-                    )
-                    return
-
-        thread_ids_str_set = set()
-        thread_ids_raw = configure_view.thread_ids
-        if thread_ids_raw is not None:
-            thread_ids_str_set = set(str(thread_ids_raw).replace(" ", "").split(","))
-        thread_ids = []
-        for x in thread_ids_str_set:
-            try:
-                thread_ids.append(int(x))
-            except Exception as e:
-                logger.warning(f"Unable to parse thread ID {x} from input to integer")
-                continue
-
-        server_config.resource_data.leaderboards.append(
-            data.ConfigLeaderboard(
-                leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
-                short_name=str(configure_view.short_name),
-                thread_ids=thread_ids,
-            )
-        )
-        logger.info(
-            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in discord server {interaction.guild.id}"
-        )
-        await interaction.followup.send(
-            content=f"Linked leaderboard with ID: {str(l.leaderboard_id)}"
-        )
-
-        self.bot.loop.create_task(
-            self.background_process(
-                guild_id=interaction.guild.id,
+        if configure_view.leaderboard_id is not None:
+            await self.handle_link_new_leaderboard(
                 server_config=server_config,
+                configure_view=configure_view,
+                interaction=interaction,
+                guild_id=interaction.guild.id,
             )
-        )
+            return
+
+        if configure_view.unlink_leaderboard_id is not None:
+            await self.handle_unlink_leaderboard(
+                server_config=server_config,
+                configure_view=configure_view,
+                interaction=interaction,
+                guild_id=interaction.guild.id,
+            )
+            return
 
 
 class AddNewAddressModal(discord.ui.Modal, title="Add new address for user"):
@@ -334,12 +429,31 @@ class AddNewAddressModal(discord.ui.Modal, title="Add new address for user"):
         await interaction.response.defer()
 
 
+class RemoveAddressModal(discord.ui.Modal, title="Remove address"):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.r_a_input = discord.ui.TextInput(
+            style=discord.TextStyle.short,
+            label="Blockchain address",
+            required=True,
+            placeholder="0x...",
+        )
+        self.add_item(self.r_a_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        await interaction.response.defer()
+
+
 class UserView(discord.ui.View):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.address_input: Optional[str] = None
         self.description_input: Optional[str] = None
+
+        self.remove_address_input: Optional[str] = None
 
     @discord.ui.button(label="Add new address")
     async def button_add_new_address(
@@ -356,14 +470,18 @@ class UserView(discord.ui.View):
     async def button_delete_address(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        await interaction.response.send_message(content="Delete address pressed")
+        remove_address_modal = RemoveAddressModal()
+        await interaction.response.send_modal(remove_address_modal)
+        await remove_address_modal.wait()
+        self.remove_address_input = remove_address_modal.r_a_input
+        self.stop()
 
 
 class UserCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
-    async def background_process(
+    async def background_process_add_user_address(
         self, user_id: int, new_address: data.UserAddress
     ) -> None:
         entity = await actions.push_user_address(
@@ -376,35 +494,30 @@ class UserCog(commands.Cog):
                 f"Unable to save entity for user with discord ID: {str(user_id)} and address: {new_address.address}"
             )
             return
+
+        new_address.entity_id = entity.id
+
         logger.info(f"Saved user address as entity with ID: {entity.id}")
 
-    @app_commands.command(name="user", description=f"User settings")
-    async def user(self, interaction: discord.Interaction):
+    async def background_process_remove_user_address(
+        self, entity_id: uuid.UUID
+    ) -> None:
+        removed_entry_id = await actions.remove_user_address(entity_id=entity_id)
+
+        if removed_entry_id is None:
+            logger.error(f"Unable to delete entity with ID: {str(entity_id)}")
+            return
+
         logger.info(
-            actions.prepare_log_message(
-                "/user",
-                "SLASH COMMAND",
-                interaction.user,
-                interaction.guild,
-                interaction.channel,
-            )
+            f"Removed user address represented as entity with ID: {str(removed_entry_id)}"
         )
 
-        user: Optional[data.User] = None
-        if interaction.user.id in self.bot.linked_users:
-            user = self.bot.linked_users[interaction.user.id]
-
-        content = "Unknown user"
-        if user is not None:
-            address = [f"{a.address} - {a.description}" for a in user.addresses]
-            content = "\n".join(address)
-
-        user_view = UserView()
-        await interaction.response.send_message(
-            content=content, view=user_view, ephemeral=True
-        )
-        await user_view.wait()
-
+    async def handle_add_user_address(
+        self,
+        user_view: UserView,
+        interaction: discord.Interaction,
+        user: Optional[data.User] = None,
+    ) -> None:
         if user is None:
             user = data.User(discord_id=interaction.user.id, addresses=[])
             self.bot.linked_users[interaction.user.id] = user
@@ -432,11 +545,95 @@ class UserCog(commands.Cog):
         )
 
         self.bot.loop.create_task(
-            self.background_process(
+            self.background_process_add_user_address(
                 user_id=interaction.user.id,
                 new_address=new_address,
             )
         )
+
+    async def remove_user_address(
+        self,
+        user_view: UserView,
+        interaction: discord.Interaction,
+        user: Optional[data.User] = None,
+    ) -> None:
+        if user is None:
+            await interaction.followup.send(
+                content=f"User does not have set addresses", ephemeral=True
+            )
+            return
+
+        entity_id_to_remove: Optional[uuid.UUID] = None
+        addresses: List[data.UserAddress] = []
+        for a in user.addresses:
+            if str(user_view.remove_address_input).lower() == a.address.lower():
+                entity_id_to_remove = a.entity_id
+                continue
+
+            addresses.append(a)
+
+        if entity_id_to_remove is None:
+            await interaction.followup.send(
+                content=f"Address: {str(user_view.remove_address_input)} not found in user addresses"
+            )
+            return
+
+        user.addresses.clear()
+        user.addresses = addresses
+        self.bot.linked_users[interaction.user.id] = user
+
+        logger.info(
+            f"Removed address: {str(user_view.remove_address_input)} from user addresses"
+        )
+        await interaction.followup.send(
+            content=f"Removed address: {str(user_view.remove_address_input)}"
+        )
+
+        self.bot.loop.create_task(
+            self.background_process_remove_user_address(
+                entity_id=entity_id_to_remove,
+            )
+        )
+
+    @app_commands.command(name="user", description=f"User settings")
+    async def user(self, interaction: discord.Interaction):
+        logger.info(
+            actions.prepare_log_message(
+                "/user",
+                "SLASH COMMAND",
+                interaction.user,
+                interaction.guild,
+                interaction.channel,
+            )
+        )
+
+        # TODO(kompotkot): Review, to handle None in vars
+        user: Optional[data.User] = None
+        if interaction.user.id in self.bot.linked_users:
+            user = self.bot.linked_users[interaction.user.id]
+
+        content = "Unknown user"
+        if user is not None:
+            address = [f"{a.address} - {a.description}" for a in user.addresses]
+            content = "\n".join(address)
+
+        user_view = UserView()
+        await interaction.response.send_message(
+            content=content, view=user_view, ephemeral=True
+        )
+        await user_view.wait()
+
+        if user_view.address_input is not None:
+            await self.handle_add_user_address(
+                user_view=user_view, interaction=interaction, user=user
+            )
+            return
+
+        if user_view.remove_address_input is not None:
+            await self.remove_user_address(
+                user_view=user_view, interaction=interaction, user=user
+            )
+            return
 
 
 class PingCog(commands.Cog):
@@ -509,7 +706,7 @@ class LeaderboardCog(commands.Cog):
 
         return embed
 
-    async def background_process(
+    async def background_process_leaderboard(
         self,
         user: Any,
         channel: Any,
@@ -546,7 +743,7 @@ class LeaderboardCog(commands.Cog):
         )
 
         self.bot.loop.create_task(
-            self.background_process(
+            self.background_process_leaderboard(
                 user=interaction.user, channel=interaction.channel, l_id=id
             )
         )
