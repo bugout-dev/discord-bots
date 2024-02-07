@@ -63,10 +63,6 @@ class LeaderboardDiscordBot(commands.Bot):
         logger.info(f"Slash commands synced: {len(synced)}")
 
     async def on_message(self, message: Message):
-        if message.guild is not None:
-            if message.guild.owner == message.author:
-                print("Owner is speaking")
-
         logger.debug(
             actions.prepare_log_message(
                 "-",
@@ -384,16 +380,25 @@ class ConfigureCog(commands.Cog):
             )
         )
 
+        owner_id: Optional[int] = None
         server_config: Optional[data.ResourceConfig] = None
         if interaction.guild is not None:
             server_config = self.bot.server_configs.get(interaction.guild.id)
+            owner_id = interaction.guild.owner_id
         else:
             await interaction.response.send_message(
                 embed=discord.Embed(
                     description="Could not find a guild to configure, please use command at Discord server"
                 )
             )
+            return
 
+        if owner_id != interaction.user.id:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    description="Restricted section only for Discord server administrators"
+                )
+            )
             return
 
         linked_leaderboards: List[List[Any]] = []
@@ -715,7 +720,9 @@ class UserCog(commands.Cog):
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
                 title="Addresses linked to current Discord user",
-                description="",
+                description=(
+                    "" if len(address) != 0 else "There are no linked addresses"
+                ),
                 fields=[f for d in address for f in d],
             ),
             view=user_view,
