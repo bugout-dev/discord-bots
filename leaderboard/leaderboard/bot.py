@@ -1,7 +1,7 @@
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
 import discord
 from bugout.data import BugoutSearchResult, BugoutSearchResultAsEntity
@@ -755,10 +755,10 @@ class LeaderboardCog(commands.Cog):
         autocompletion: List[app_commands.Choice[str]] = []
 
         server_config: Optional[data.ResourceConfig] = None
-        if interaction.guild is not None:
-            server_config = self.bot.server_configs.get(interaction.guild.id)
-        else:
+        if interaction.guild is None:
             return autocompletion
+
+        server_config = self.bot.server_configs.get(interaction.guild.id)
 
         if server_config is not None:
             for l in server_config.resource_data.leaderboards:
@@ -769,6 +769,62 @@ class LeaderboardCog(commands.Cog):
                         )
                     )
         return autocompletion
+
+
+class DynamicSelect(discord.ui.Select):
+    def __init__(
+        self,
+        callback_func: Callable,
+        options: List[discord.SelectOption],
+        placeholder: str = "",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(options=options, placeholder=placeholder, *args, **kwargs)
+        self.callback_func = callback_func
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.callback_func(interaction, self.values)
+
+
+class LeaderboardSelectView(discord.ui.View):
+    def __init__(self, leaderboards: List[data.ConfigLeaderboard], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        async def select_callback(
+            interaction: discord.Interaction, values: List[str]
+        ) -> None:
+            await self.respond_to_select_leaderboard(
+                interaction=interaction, select_items=values
+            )
+
+        self.add_item(
+            DynamicSelect(
+                callback_func=select_callback,
+                options=[
+                    discord.SelectOption(
+                        label=l.short_name, value=str(l.leaderboard_id)
+                    )
+                    for l in leaderboards
+                ],
+                placeholder="Choose a leaderboard",
+            )
+        )
+
+        self.leaderboard_id: Optional[str] = None
+
+    async def respond_to_select_leaderboard(
+        self, interaction: discord.Interaction, select_items
+    ):
+        await interaction.response.defer()
+
+        if len(select_items) != 1:
+            logger.error("Wrong selection")
+            self.stop()
+            return
+
+        self.leaderboard_id = select_items[0]
+        self.stop()
 
 
 class PositionCog(commands.Cog):
@@ -793,7 +849,7 @@ class PositionCog(commands.Cog):
 
         return embed
 
-    @app_commands.command(name="position", description=f"Show user results")
+    @app_commands.command(name="position", description="Show user results")
     async def position(self, interaction: discord.Interaction, address: str):
         logger.info(
             actions.prepare_log_message(
@@ -826,29 +882,67 @@ class PositionCog(commands.Cog):
             )
             return
 
-        l_id: Optional[uuid.UUID] = None
+        leaderboards: List[data.ConfigLeaderboard] = []
         for l in server_config.resource_data.leaderboards:
             for t in l.thread_ids:
                 if interaction.channel.id == t:
-                    l_id = l.leaderboard_id
-        if l_id is None:
+                    leaderboards.append(l)
+
+        leaderboard_id: Optional[uuid.UUID] = None
+        if len(leaderboards) == 1:
+            leaderboard_id = leaderboards[0].leaderboard_id
+            await interaction.response.send_message(
+                content=f"Processing {leaderboards[0].short_name} leaderboard",
+                ephemeral=True,
+            )
+        if len(leaderboards) > 1:
+            leaderboard_select_view = LeaderboardSelectView(leaderboards)
+
+            await interaction.response.send_message(
+                content="There multiple leaderboards, pleas select one",
+                view=leaderboard_select_view,
+                ephemeral=True,
+            )
+            await leaderboard_select_view.wait()
+            leaderboard_id = uuid.UUID(leaderboard_select_view.leaderboard_id)
+
+        else:
             await interaction.response.send_message(
                 embed=discord.Embed(description=MESSAGE_LEADERBOARD_NOT_FOUND)
             )
             return
 
         l_info, l_score = await actions.process_leaderboard_info_with_position(
-            l_id=l_id, address=address
+            l_id=leaderboard_id, address=address
         )
         if l_score is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=discord.Embed(description=MESSAGE_POSITION_NOT_FOUND)
             )
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=self.prepare_embed(
                 l_info=l_info,
                 l_score=l_score,
             )
         )
+
+    @position.autocomplete("address")
+    async def position_autocompletion(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
+        autocompletion: List[app_commands.Choice[str]] = []
+
+        if interaction.user is None:
+            return autocompletion
+
+        user = self.bot.linked_users.get(interaction.user.id)
+
+        if user is not None:
+            for a in user.addresses:
+                if current.lower() in a.description.lower():
+                    autocompletion.append(
+                        app_commands.Choice(name=a.description, value=str(a.address))
+                    )
+        return autocompletion
