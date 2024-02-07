@@ -39,6 +39,8 @@ def discord_run_handler(args: argparse.Namespace) -> None:
     bot = LeaderboardDiscordBot(
         command_prefix=commands.when_mentioned_or("?"), intents=intents
     )
+
+    # TODO(kompotkot): Re-write to setters and fall a bot if no configs or users fetched
     bot.load_bugout_configs()
     bot.load_bugout_users()
 

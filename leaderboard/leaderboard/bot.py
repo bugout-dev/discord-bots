@@ -7,6 +7,7 @@ import discord
 from bugout.data import BugoutSearchResult, BugoutSearchResultAsEntity
 from discord import app_commands
 from discord.ext import commands
+from discord.member import Member
 from discord.message import Message
 
 from . import actions, data
@@ -289,7 +290,7 @@ class ConfigureCog(commands.Cog):
         )
         await interaction.followup.send(
             embed=actions.prepare_dynamic_embed(
-                title="New leaderboard to Discord server",
+                title="New leaderboard linked to Discord server",
                 description="",
                 fields=[
                     {
@@ -380,12 +381,7 @@ class ConfigureCog(commands.Cog):
             )
         )
 
-        owner_id: Optional[int] = None
-        server_config: Optional[data.ResourceConfig] = None
-        if interaction.guild is not None:
-            server_config = self.bot.server_configs.get(interaction.guild.id)
-            owner_id = interaction.guild.owner_id
-        else:
+        if interaction.guild is None:
             await interaction.response.send_message(
                 embed=discord.Embed(
                     description="Could not find a guild to configure, please use command at Discord server"
@@ -393,7 +389,24 @@ class ConfigureCog(commands.Cog):
             )
             return
 
-        if owner_id != interaction.user.id:
+        server_config: Optional[data.ResourceConfig] = self.bot.server_configs.get(
+            interaction.guild.id
+        )
+
+        is_allowed = actions.auth_middleware(
+            user_id=interaction.user.id,
+            user_roles=interaction.user.roles
+            if type(interaction.user) == Member
+            else [],
+            server_config_roles=(
+                server_config.resource_data.discord_roles
+                if server_config is not None
+                else []
+            ),
+            guild_owner_id=interaction.guild.owner_id,
+        )
+
+        if is_allowed is False:
             await interaction.response.send_message(
                 embed=discord.Embed(
                     description="Restricted section only for Discord server administrators"
@@ -401,23 +414,7 @@ class ConfigureCog(commands.Cog):
             )
             return
 
-        linked_leaderboards: List[List[Any]] = []
-        if server_config is not None:
-            linked_leaderboards = [
-                [
-                    {
-                        "field_name": "Leaderboard ID",
-                        "field_value": str(l.leaderboard_id),
-                    },
-                    {
-                        "field_name": "Short name",
-                        "field_value": l.short_name,
-                    },
-                    {"field_name": "Thread IDs", "field_value": l.thread_ids},
-                ]
-                for l in server_config.resource_data.leaderboards
-            ]
-        else:
+        if server_config is None:
             server_config = data.ResourceConfig(
                 id=uuid.uuid4(),
                 resource_data=data.Config(
@@ -431,12 +428,25 @@ class ConfigureCog(commands.Cog):
         configure_view = ConfigureView()
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
-                title="New address linked to Discord account",
-                description="",
-                fields=[f for l in linked_leaderboards for f in l],
+                title="List of addresses linked to Discord server",
+                description=f"Allowed roles to manage Discord server configuration: {[r.name for r in server_config.resource_data.discord_roles]}",
+                fields=[
+                    d
+                    for l in server_config.resource_data.leaderboards
+                    for d in [
+                        {
+                            "field_name": "Leaderboard ID",
+                            "field_value": str(l.leaderboard_id),
+                        },
+                        {
+                            "field_name": "Short name",
+                            "field_value": l.short_name,
+                        },
+                        {"field_name": "Thread IDs", "field_value": l.thread_ids},
+                    ]
+                ],
             ),
             view=configure_view,
-            ephemeral=True,
         )
         await configure_view.wait()
 

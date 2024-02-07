@@ -10,6 +10,7 @@ from bugout.data import BugoutJournalEntity, BugoutResource
 from discord import Embed
 from discord.guild import Guild
 from discord.member import Member
+from discord.role import Role
 from discord.user import User
 
 from . import data
@@ -59,7 +60,7 @@ def query_input_validation(query_input: str) -> str:
 
 
 def prepare_dynamic_embed(
-    title: str, description: str, fields: List[Dict[str, str]] = []
+    title: str, description: str, fields: List[Any] = []
 ) -> Embed:
     embed = Embed(
         title=title,
@@ -69,6 +70,28 @@ def prepare_dynamic_embed(
         embed.add_field(name=f["field_name"], value=f["field_value"])
 
     return embed
+
+
+def auth_middleware(
+    user_id: int,
+    user_roles: List[Role],
+    server_config_roles: List[data.ConfigRole],
+    guild_owner_id: Optional[int] = None,
+) -> bool:
+    """
+    TODO(kompotkot): Use discord @command.has_role modified to work with server configuration
+    """
+    if guild_owner_id is not None:
+        if user_id == guild_owner_id:
+            return True
+
+    server_config_role_ids_set = set([r.id for r in server_config_roles])
+    user_role_ids_set = set([r.id for r in user_roles])
+
+    if len(user_role_ids_set.intersection(server_config_role_ids_set)) >= 1:
+        return True
+
+    return False
 
 
 async def caller(

@@ -19,10 +19,15 @@ class ConfigLeaderboard(BaseModel):
     thread_ids: List[int] = Field(default_factory=list)
 
 
+class ConfigRole(BaseModel):
+    id: int
+    name: str
+
+
 class Config(BaseModel):
     type: str
     discord_server_id: int
-    discord_roles: List[str] = Field(default_factory=list)
+    discord_roles: List[ConfigRole] = Field(default_factory=list)
     leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
 
 
