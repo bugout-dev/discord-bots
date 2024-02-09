@@ -226,21 +226,37 @@ class ConfigureCog(commands.Cog):
         self.bot = bot
 
     async def background_process_configure(
-        self, guild_id: int, server_config: data.ResourceConfig
+        self, guild_id: int, server_config: data.ResourceConfig, is_new_server: bool
     ) -> None:
-        resource = await actions.push_server_config(
-            resource_id=server_config.id,
-            leaderboards=server_config.resource_data.leaderboards,
-        )
-        if resource is None:
-            logger.error(
-                f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+        if is_new_server is True:
+            resource = await actions.create_server_config(
+                discord_server_id=guild_id,
+                leaderboards=server_config.resource_data.leaderboards,
             )
-            return
+            if resource is None:
+                logger.error(
+                    f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+                )
+                return
+            server_config.id = resource.id
 
-        logger.info(
-            f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
-        )
+            logger.info(
+                f"Create server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
+            )
+        else:
+            resource = await actions.update_server_config(
+                resource_id=server_config.id,
+                leaderboards=server_config.resource_data.leaderboards,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+                )
+                return
+
+            logger.info(
+                f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
+            )
 
     async def handle_link_new_leaderboard(
         self,
@@ -248,6 +264,7 @@ class ConfigureCog(commands.Cog):
         configure_view: ConfigureView,
         interaction: discord.Interaction,
         guild_id: int,
+        is_new_server: bool,
     ) -> None:
         for l in server_config.resource_data.leaderboards:
             if str(l.leaderboard_id) == str(configure_view.leaderboard_id):
@@ -278,7 +295,7 @@ class ConfigureCog(commands.Cog):
             )
         )
         logger.info(
-            f"Linked new leaderboard with ID: {str(l.leaderboard_id)} in Discord server {guild_id}"
+            f"Linked new leaderboard with ID: {str(configure_view.leaderboard_id)} in Discord server {guild_id}"
         )
         await interaction.followup.send(
             embed=actions.prepare_dynamic_embed(
@@ -287,7 +304,7 @@ class ConfigureCog(commands.Cog):
                 fields=[
                     {
                         "field_name": "Leaderboard ID",
-                        "field_value": str(l.leaderboard_id),
+                        "field_value": str(configure_view.leaderboard_id),
                     },
                     {
                         "field_name": "Short name",
@@ -305,6 +322,7 @@ class ConfigureCog(commands.Cog):
             self.background_process_configure(
                 guild_id=guild_id,
                 server_config=server_config,
+                is_new_server=is_new_server,
             )
         )
 
@@ -356,6 +374,7 @@ class ConfigureCog(commands.Cog):
             self.background_process_configure(
                 guild_id=guild_id,
                 server_config=server_config,
+                is_new_server=False,
             )
         )
 
@@ -406,9 +425,9 @@ class ConfigureCog(commands.Cog):
             )
             return
 
+        is_new_server = False
         if server_config is None:
             server_config = data.ResourceConfig(
-                id=uuid.uuid4(),
                 resource_data=data.Config(
                     type=BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
                     discord_server_id=interaction.guild.id,
@@ -416,6 +435,8 @@ class ConfigureCog(commands.Cog):
                     leaderboards=[],
                 ),
             )
+            self.bot.server_configs[interaction.guild.id] = server_config
+            is_new_server = True
 
         configure_view = ConfigureView()
         await interaction.response.send_message(
@@ -448,6 +469,7 @@ class ConfigureCog(commands.Cog):
                 configure_view=configure_view,
                 interaction=interaction,
                 guild_id=interaction.guild.id,
+                is_new_server=is_new_server,
             )
             return
 

@@ -32,7 +32,7 @@ class Config(BaseModel):
 
 
 class ResourceConfig(BaseModel):
-    id: uuid.UUID
+    id: Optional[uuid.UUID] = None
     resource_data: Config
 
 

@@ -21,6 +21,7 @@ from .settings import (
     MOONSTREAM_APPLICATION_ID,
     MOONSTREAM_ENGINE_API_URL,
     MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+    BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,7 +226,32 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
     return removed_resource_id
 
 
-async def push_server_config(
+async def create_server_config(
+    discord_server_id: int, leaderboards: List[data.ConfigLeaderboard]
+):
+    resource: Optional[BugoutResource] = None
+    response = await caller(
+        url=f"{BUGOUT_BROOD_URL}/resources",
+        method=data.RequestMethods.POST,
+        request_data={
+            "application_id": MOONSTREAM_APPLICATION_ID,
+            "resource_data": {
+                "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
+                "leaderboards": [json.loads(l.json()) for l in leaderboards],
+                "discord_roles": [],
+                "discord_server_id": discord_server_id,
+            },
+        },
+        is_auth=True,
+    )
+
+    if response is not None:
+        resource = BugoutResource(**response)
+
+    return resource
+
+
+async def update_server_config(
     resource_id: uuid.UUID, leaderboards: List[data.ConfigLeaderboard]
 ) -> Optional[BugoutResource]:
     resource: Optional[BugoutResource] = None
