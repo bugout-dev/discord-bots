@@ -4,11 +4,10 @@ import logging
 
 from discord.ext import commands
 
-from . import actions, data
+from . import actions
 from .bot import LeaderboardDiscordBot, configure_intents
 from .settings import (
     LEADERBOARD_DISCORD_BOT_TOKEN,
-    LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
     LOG_LEVEL,
     MOONSTREAM_APPLICATION_ID,
     MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
@@ -29,10 +28,6 @@ def discord_run_handler(args: argparse.Namespace) -> None:
     if MOONSTREAM_APPLICATION_ID == "":
         raise Exception(
             f"MOONSTREAM_APPLICATION_ID environment variable is not set, configuration fetch unavailable"
-        )
-    if LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID == "":
-        raise Exception(
-            "LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID environment variable is not set, configuration fetch unavailable"
         )
 
     intents = configure_intents()

@@ -13,9 +13,9 @@ from discord.message import Message
 from . import actions, data
 from .settings import (
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
+    BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
     COLORS,
     LEADERBOARD_DISCORD_BOT_NAME,
-    LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
     MOONSTREAM_APPLICATION_ID,
     MOONSTREAM_URL,
     MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
@@ -41,7 +41,7 @@ class LeaderboardDiscordBot(commands.Bot):
         super().__init__(*args, **kwargs)
 
         self.server_configs: Dict[int, data.ResourceConfig] = {}
-        self.linked_users: Dict[int, data.User] = {}
+        self.user_idents: Dict[int, List[data.UserIdentity]] = {}
 
         self.available_cogs = [
             PingCog,
@@ -78,47 +78,35 @@ class LeaderboardDiscordBot(commands.Bot):
 
     def load_bugout_users(self) -> None:
         try:
-            response = bc.search(
+            response = bc.list_resources(
                 token=MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
-                journal_id=LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
-                query="tag:type:user-link",
-                limit=100,
-                content=True,
-                representation="entity",
+                params={
+                    "application_id": MOONSTREAM_APPLICATION_ID,
+                    "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
+                },
             )
-            logger.info(f"Fetched configuration of {response.total_results} users")
-            results: List[BugoutSearchResultAsEntity] = response.results  # type: ignore
-            for rec in results:
+
+            logger.info(f"Fetched identities of {len(response.resources)} users")
+
+            for r in response.resources:
                 try:
-                    user_discord_id = int(
-                        list(
-                            filter(
-                                lambda x: x.get("discord-user-id") is not None,
-                                rec.required_fields,
-                            )
-                        )[0]["discord-user-id"]
+                    discord_user_id = r.resource_data["discord_user_id"]
+                    fetched_identity = data.UserIdentity(
+                        resource_id=r.id,
+                        identifier=r.resource_data["identifier"],
+                        name=r.resource_data["name"],
                     )
-                    user = self.linked_users[user_discord_id]
-                except KeyError:
-                    user = data.User(
-                        discord_id=user_discord_id,
-                        addresses=[],
-                    )
-                    self.linked_users[user_discord_id] = user
-                except Exception:
-                    logger.error(f"Wrong format of entity: {rec.entity_url}")
+
+                    identities = self.user_idents.get(discord_user_id)
+                    if identities is None:
+                        self.user_idents[discord_user_id] = [fetched_identity]
+                    else:
+                        self.user_idents[discord_user_id].append(fetched_identity)
+                except KeyError as e:
+                    logger.warning(f"Malformed resource with ID: {str(r.id)}")
                     continue
-
-                entity_id_raw = rec.entity_url.rstrip("/").split("/")[-1]
-                user.addresses.append(
-                    data.UserAddress(
-                        entity_id=uuid.UUID(entity_id_raw),
-                        address=str(rec.address),
-                        blockchain=str(rec.blockchain),
-                        description=rec.secondary_fields.get("description", ""),
-                    )
-                )
-
+                except Exception as e:
+                    logger.error(e)
         except Exception as e:
             raise Exception(e)
 
@@ -130,6 +118,10 @@ class LeaderboardDiscordBot(commands.Bot):
                     "application_id": MOONSTREAM_APPLICATION_ID,
                     "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
                 },
+            )
+
+            logger.info(
+                f"Fetched {len(response.resources)} Discord server configurations"
             )
 
             for r in response.resources:
@@ -395,9 +387,9 @@ class ConfigureCog(commands.Cog):
 
         is_allowed = actions.auth_middleware(
             user_id=interaction.user.id,
-            user_roles=interaction.user.roles
-            if type(interaction.user) == Member
-            else [],
+            user_roles=(
+                interaction.user.roles if type(interaction.user) == Member else []
+            ),
             server_config_roles=(
                 server_config.resource_data.discord_roles
                 if server_config is not None
@@ -428,7 +420,7 @@ class ConfigureCog(commands.Cog):
         configure_view = ConfigureView()
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
-                title="List of addresses linked to Discord server",
+                title="List of leaderboards linked to Discord server",
                 description=f"Allowed roles to manage Discord server configuration: {[r.name for r in server_config.resource_data.discord_roles]}",
                 fields=[
                     d
@@ -469,42 +461,42 @@ class ConfigureCog(commands.Cog):
             return
 
 
-class AddNewAddressModal(discord.ui.Modal, title="Add new address for user"):
+class AddNewIdentityModal(discord.ui.Modal, title="Add new identity for user"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.a_input = discord.ui.TextInput(
+        self.i_input = discord.ui.TextInput(
             style=discord.TextStyle.short,
-            label="Blockchain address",
+            label="Field identifier (address, NFT, class, etc)",
             required=True,
             placeholder="0x...",
         )
-        self.d_input = discord.ui.TextInput(
+        self.n_input = discord.ui.TextInput(
             style=discord.TextStyle.short,
-            label="Address short description",
+            label="Short name",
             required=True,
             placeholder="My main address",
         )
 
-        self.add_item(self.a_input)
-        self.add_item(self.d_input)
+        self.add_item(self.i_input)
+        self.add_item(self.n_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.stop()
         await interaction.response.defer()
 
 
-class RemoveAddressModal(discord.ui.Modal, title="Remove address"):
+class RemoveIdentityModal(discord.ui.Modal, title="Remove identity"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.r_a_input = discord.ui.TextInput(
+        self.r_i_input = discord.ui.TextInput(
             style=discord.TextStyle.short,
-            label="Blockchain address",
+            label="Field identifier",
             required=True,
             placeholder="0x...",
         )
-        self.add_item(self.r_a_input)
+        self.add_item(self.r_i_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.stop()
@@ -515,30 +507,30 @@ class UserView(discord.ui.View):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.address_input: Optional[str] = None
-        self.description_input: Optional[str] = None
+        self.ident_input: Optional[str] = None
+        self.name_input: Optional[str] = None
 
-        self.remove_address_input: Optional[str] = None
+        self.remove_ident_input: Optional[str] = None
 
-    @discord.ui.button(label="Add new address")
-    async def button_add_new_address(
+    @discord.ui.button(label="Link new identification")
+    async def button_add_new_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        add_new_address_modal = AddNewAddressModal()
-        await interaction.response.send_modal(add_new_address_modal)
-        await add_new_address_modal.wait()
-        self.address_input = add_new_address_modal.a_input
-        self.description_input = add_new_address_modal.d_input
+        add_new_ident_modal = AddNewIdentityModal()
+        await interaction.response.send_modal(add_new_ident_modal)
+        await add_new_ident_modal.wait()
+        self.ident_input = add_new_ident_modal.i_input
+        self.name_input = add_new_ident_modal.n_input
         self.stop()
 
-    @discord.ui.button(label="Delete address")
-    async def button_delete_address(
+    @discord.ui.button(label="Unpin the identification")
+    async def button_delete_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        remove_address_modal = RemoveAddressModal()
-        await interaction.response.send_modal(remove_address_modal)
-        await remove_address_modal.wait()
-        self.remove_address_input = remove_address_modal.r_a_input
+        remove_ident_modal = RemoveIdentityModal()
+        await interaction.response.send_modal(remove_ident_modal)
+        await remove_ident_modal.wait()
+        self.remove_ident_input = remove_ident_modal.r_i_input
         self.stop()
 
 
@@ -546,81 +538,80 @@ class UserCog(commands.Cog):
     def __init__(self, bot: LeaderboardDiscordBot):
         self.bot = bot
 
-    async def background_process_add_user_address(
-        self, user_id: int, new_address: data.UserAddress
+    async def background_process_add_user_identity(
+        self, discord_user_id: int, new_ident: data.UserIdentity
     ) -> None:
-        entity = await actions.push_user_address(
-            user_id=user_id,
-            address=new_address.address,
-            description=new_address.description,
+        resource = await actions.push_user_identity(
+            discord_user_id=discord_user_id,
+            identifier=new_ident.identifier,
+            name=new_ident.name,
         )
-        if entity is None:
+        if resource is None:
             logger.error(
-                f"Unable to save entity for user with discord ID: {str(user_id)} and address: {new_address.address}"
+                f"Unable to save resource for user with Discord ID: {str(discord_user_id)} and identifier: {new_ident.identifier}"
             )
             return
 
-        new_address.entity_id = entity.id
+        new_ident.resource_id = resource.id
 
-        logger.info(f"Saved user address as entity with ID: {entity.id}")
+        logger.info(f"Saved user identity as resource with ID: {resource.id}")
 
-    async def background_process_remove_user_address(
-        self, entity_id: uuid.UUID
+    async def background_process_remove_user_identity(
+        self, resource_id: uuid.UUID
     ) -> None:
-        removed_entry_id = await actions.remove_user_address(entity_id=entity_id)
+        removed_resource_id = await actions.remove_user_identity(
+            resource_id=resource_id
+        )
 
-        if removed_entry_id is None:
-            logger.error(f"Unable to delete entity with ID: {str(entity_id)}")
+        if removed_resource_id is None:
+            logger.error(f"Unable to delete resource with ID: {str(resource_id)}")
             return
 
         logger.info(
-            f"Removed user address represented as entity with ID: {str(removed_entry_id)}"
+            f"Removed user identity represented as resource with ID: {str(removed_resource_id)}"
         )
 
-    async def handle_add_user_address(
+    async def handle_add_user_identity(
         self,
         user_view: UserView,
         interaction: discord.Interaction,
-        user: Optional[data.User] = None,
+        discord_user_id: int,
+        user_identities: List[data.UserIdentity],
     ) -> None:
-        if user is None:
-            user = data.User(discord_id=interaction.user.id, addresses=[])
-            self.bot.linked_users[interaction.user.id] = user
-
-        if str(user_view.address_input).lower() not in [
-            a.address.lower() for a in user.addresses
+        if str(user_view.ident_input).lower() in [
+            i.identifier.lower() for i in user_identities
         ]:
-            new_address = data.UserAddress(
-                address=str(user_view.address_input),
-                blockchain="any",
-                description=str(user_view.description_input),
-            )
-        else:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    description="Address already attached to your profile"
+                    description="Identity already attached to your profile"
                 ),
                 ephemeral=True,
             )
             return
 
-        user.addresses.append(new_address)
+        new_ident = data.UserIdentity(
+            resource_id=None,
+            identifier=str(user_view.ident_input),
+            name=str(user_view.name_input),
+        )
+        self.bot.user_idents[discord_user_id].append(new_ident)
+
         logger.info(
-            f"Added new address: {str(user_view.address_input)} by user {interaction.user} - {interaction.user.id}"
+            f"Added to {discord_user_id} new identity: {str(user_view.ident_input)} by user Discord {interaction.user} - {interaction.user.id}"
         )
 
         await interaction.followup.send(
             embed=actions.prepare_dynamic_embed(
-                title="New address linked to Discord account",
+                title="New identity linked to Discord account",
                 description="",
                 fields=[
                     {
-                        "field_name": "Address",
-                        "field_value": str(user_view.address_input),
+                        "field_name": "Identity",
+                        "field_value": str(user_view.ident_input),
                     },
                     {
-                        "field_name": "Short description",
-                        "field_value": str(user_view.description_input),
+                        "field_name": "Name",
+                        "field_value": str(user_view.name_input),
                     },
                 ],
             ),
@@ -628,58 +619,59 @@ class UserCog(commands.Cog):
         )
 
         self.bot.loop.create_task(
-            self.background_process_add_user_address(
-                user_id=interaction.user.id,
-                new_address=new_address,
+            self.background_process_add_user_identity(
+                discord_user_id=discord_user_id,
+                new_ident=new_ident,
             )
         )
 
-    async def remove_user_address(
+    async def remove_user_identity(
         self,
         user_view: UserView,
         interaction: discord.Interaction,
-        user: Optional[data.User] = None,
+        discord_user_id: int,
+        user_identities: List[data.UserIdentity],
     ) -> None:
-        if user is None:
+        if len(user_identities) == 0:
             await interaction.followup.send(
-                embed=discord.Embed(description="User does not have set addresses"),
+                embed=discord.Embed(
+                    description="User does not have identities linked to Discord account"
+                ),
                 ephemeral=True,
             )
             return
 
-        entity_id_to_remove: Optional[uuid.UUID] = None
-        addresses: List[data.UserAddress] = []
-        for a in user.addresses:
-            if str(user_view.remove_address_input).lower() == a.address.lower():
-                entity_id_to_remove = a.entity_id
+        resource_id_to_remove: Optional[uuid.UUID] = None
+        updated_identities: List[data.UserIdentity] = []
+        for i in user_identities:
+            if str(user_view.remove_ident_input).lower() == i.identifier.lower():
+                resource_id_to_remove = i.resource_id
                 continue
 
-            addresses.append(a)
+            updated_identities.append(i)
 
-        if entity_id_to_remove is None:
+        if resource_id_to_remove is None:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    description=f"Address: {str(user_view.remove_address_input)} not found in user addresses"
+                    description=f"Identity: {str(user_view.remove_ident_input)} not found in user list"
                 ),
             )
             return
 
-        user.addresses.clear()
-        user.addresses = addresses
-        self.bot.linked_users[interaction.user.id] = user
+        self.bot.user_idents[discord_user_id] = updated_identities
 
         logger.info(
-            f"Removed address: {str(user_view.remove_address_input)} from user addresses"
+            f"Removed identity: {str(user_view.remove_ident_input)} from user list"
         )
 
         await interaction.followup.send(
             embed=actions.prepare_dynamic_embed(
-                title="Unlinked address from Discord account",
+                title="Unlinked identity from Discord account",
                 description="",
                 fields=[
                     {
-                        "field_name": "Address",
-                        "field_value": str(user_view.remove_address_input),
+                        "field_name": "Identity",
+                        "field_value": str(user_view.remove_ident_input),
                     }
                 ],
             ),
@@ -687,8 +679,8 @@ class UserCog(commands.Cog):
         )
 
         self.bot.loop.create_task(
-            self.background_process_remove_user_address(
-                entity_id=entity_id_to_remove,
+            self.background_process_remove_user_identity(
+                resource_id=resource_id_to_remove,
             )
         )
 
@@ -704,51 +696,56 @@ class UserCog(commands.Cog):
             )
         )
 
-        # TODO(kompotkot): Review, to handle None in vars
-        user: Optional[data.User] = None
-        if interaction.user.id in self.bot.linked_users:
-            user = self.bot.linked_users[interaction.user.id]
-
-        address = []
-        if user is not None:
-            address = [
-                [
-                    {
-                        "field_name": "Address",
-                        "field_value": a.address,
-                    },
-                    {
-                        "field_name": "Short description",
-                        "field_value": a.description,
-                    },
-                    {"field_name": "\u200B", "field_value": "\u200B"},
-                ]
-                for a in user.addresses
+        discord_user_id = interaction.user.id
+        user_identities: List[data.UserIdentity] = self.bot.user_idents.get(
+            discord_user_id, []
+        )
+        identity_fields = [
+            [
+                {
+                    "field_name": "Identity",
+                    "field_value": i.identifier,
+                },
+                {
+                    "field_name": "Name",
+                    "field_value": i.name,
+                },
+                {"field_name": "\u200B", "field_value": "\u200B"},
             ]
+            for i in user_identities
+        ]
 
         user_view = UserView()
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
-                title="Addresses linked to current Discord user",
+                title="Identities linked to current Discord user",
                 description=(
-                    "" if len(address) != 0 else "There are no linked addresses"
+                    ""
+                    if len(user_identities) != 0
+                    else "There are no linked identities"
                 ),
-                fields=[f for d in address for f in d],
+                fields=[f for d in identity_fields for f in d],
             ),
             view=user_view,
             ephemeral=True,
         )
         await user_view.wait()
 
-        if user_view.address_input is not None:
-            await self.handle_add_user_address(
-                user_view=user_view, interaction=interaction, user=user
+        if user_view.ident_input is not None:
+            await self.handle_add_user_identity(
+                user_view=user_view,
+                interaction=interaction,
+                discord_user_id=discord_user_id,
+                user_identities=user_identities,
             )
             return
 
-        if user_view.remove_address_input is not None:
-            await self.remove_user_address(
-                user_view=user_view, interaction=interaction, user=user
+        if user_view.remove_ident_input is not None:
+            await self.remove_user_identity(
+                user_view=user_view,
+                interaction=interaction,
+                discord_user_id=discord_user_id,
+                user_identities=user_identities,
             )
             return
 
@@ -967,7 +964,7 @@ class PositionCog(commands.Cog):
         return embed
 
     @app_commands.command(name="position", description="Show user results")
-    async def position(self, interaction: discord.Interaction, address: str):
+    async def position(self, interaction: discord.Interaction, identity: str):
         logger.info(
             actions.prepare_log_message(
                 "/position",
@@ -1012,7 +1009,7 @@ class PositionCog(commands.Cog):
             leaderboard_id = leaderboards[0].leaderboard_id
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description=f"Looking for {address} in leaderboard: {leaderboards[0].short_name}"
+                    description=f"Looking for {identity} in leaderboard: {leaderboards[0].short_name}"
                 ),
                 ephemeral=True,
             )
@@ -1020,7 +1017,7 @@ class PositionCog(commands.Cog):
             leaderboard_select_view = LeaderboardSelectView(leaderboards)
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description="There multiple leaderboards, pleas select one"
+                    description="There are multiple leaderboards, pleas select one"
                 ),
                 view=leaderboard_select_view,
                 ephemeral=True,
@@ -1034,7 +1031,7 @@ class PositionCog(commands.Cog):
             return
 
         l_info, l_score = await actions.process_leaderboard_info_with_position(
-            l_id=leaderboard_id, address=address
+            l_id=leaderboard_id, address=identity
         )
         if l_score is None:
             await interaction.followup.send(
@@ -1049,7 +1046,7 @@ class PositionCog(commands.Cog):
             )
         )
 
-    @position.autocomplete("address")
+    @position.autocomplete("identity")
     async def position_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
@@ -1058,12 +1055,19 @@ class PositionCog(commands.Cog):
         if interaction.user is None:
             return autocompletion
 
-        user = self.bot.linked_users.get(interaction.user.id)
+        user_identities: List[data.UserIdentity] = self.bot.user_idents.get(
+            interaction.user.id, []
+        )
 
-        if user is not None:
-            for a in user.addresses:
-                if current.lower() in a.description.lower():
-                    autocompletion.append(
-                        app_commands.Choice(name=a.description, value=str(a.address))
+        for i in user_identities:
+            if (
+                current.lower() in i.name.lower()
+                or current.lower() in i.identifier.lower()
+            ):
+                autocompletion.append(
+                    app_commands.Choice(
+                        name=f"{i.identifier} - {i.name}"[:99],
+                        value=i.identifier,
                     )
+                )
         return autocompletion

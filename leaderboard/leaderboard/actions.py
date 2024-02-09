@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
-from bugout.data import BugoutJournalEntity, BugoutResource
+from bugout.data import BugoutResource
 from discord import Embed
 from discord.guild import Guild
 from discord.member import Member
@@ -16,9 +16,9 @@ from discord.user import User
 from . import data
 from .settings import (
     BUGOUT_BROOD_URL,
-    BUGOUT_SPIRE_URL,
+    BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
     COLORS,
-    LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID,
+    MOONSTREAM_APPLICATION_ID,
     MOONSTREAM_ENGINE_API_URL,
     MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
 )
@@ -184,49 +184,45 @@ async def process_leaderboard_info_with_position(
     return l_info, l_position
 
 
-async def push_user_address(
-    user_id: int,
-    address: str,
-    description: str,
-) -> Optional[BugoutJournalEntity]:
-    entity: Optional[BugoutJournalEntity] = None
+async def push_user_identity(
+    discord_user_id: int,
+    identifier: str,
+    name: str,
+) -> Optional[BugoutResource]:
+    resource: Optional[BugoutResource] = None
     response = await caller(
-        url=f"{BUGOUT_SPIRE_URL}/journals/{LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID}/entities",
+        url=f"{BUGOUT_BROOD_URL}/resources",
         method=data.RequestMethods.POST,
         request_data={
-            "address": address,
-            "blockchain": "any",
-            "title": f"{str(user_id)} - {address[0:5]}..{address[-3:]}",
-            "required_fields": [
-                {
-                    "type": "user-link",
-                    "discord-bot": "leaderboard",
-                    "discord-user-id": user_id,
-                }
-            ],
-            "description": description,
+            "application_id": MOONSTREAM_APPLICATION_ID,
+            "resource_data": {
+                "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
+                "discord_user_id": discord_user_id,
+                "identifier": identifier,
+                "name": name,
+            },
         },
         is_auth=True,
     )
 
     if response is not None:
-        entity = BugoutJournalEntity(**response)
+        resource = BugoutResource(**response)
 
-    return entity
+    return resource
 
 
-async def remove_user_address(entity_id: uuid.UUID) -> Optional[uuid.UUID]:
-    removed_entry_id: Optional[uuid.UUID] = None
+async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
+    removed_resource_id: Optional[uuid.UUID] = None
     response = await caller(
-        url=f"{BUGOUT_SPIRE_URL}/journals/{LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID}/entities/{str(entity_id)}",
+        url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
         method=data.RequestMethods.DELETE,
         is_auth=True,
     )
 
     if response is not None:
-        removed_entry_id = uuid.UUID(response["id"])
+        removed_resource_id = uuid.UUID(response["id"])
 
-    return removed_entry_id
+    return removed_resource_id
 
 
 async def push_server_config(

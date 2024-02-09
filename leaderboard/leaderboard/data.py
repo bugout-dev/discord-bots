@@ -36,16 +36,10 @@ class ResourceConfig(BaseModel):
     resource_data: Config
 
 
-class UserAddress(BaseModel):
-    entity_id: Optional[uuid.UUID] = None
-    address: str
-    blockchain: str
-    description: str
-
-
-class User(BaseModel):
-    discord_id: int
-    addresses: List[UserAddress] = Field(default_factory=list)
+class UserIdentity(BaseModel):
+    resource_id: Optional[uuid.UUID] = None
+    identifier: str
+    name: str
 
 
 class LeaderboardInfo(BaseModel):

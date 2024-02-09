@@ -5,6 +5,11 @@ from bugout.app import Bugout
 
 logger = logging.getLogger(__name__)
 
+BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG = "discord-bot-leaderboard-config"
+BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER = (
+    "discord-bot-leaderboard-user-identity"
+)
+
 LOG_LEVEL_RAW = os.environ.get("LOG_LEVEL")
 LOG_LEVEL = 20  # logging.INFO
 try:
@@ -42,8 +47,3 @@ MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN = os.environ.get(
     "MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN", ""
 )
 MOONSTREAM_APPLICATION_ID = os.environ.get("MOONSTREAM_APPLICATION_ID", "")
-BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG = "discord-bot-leaderboard-config"
-
-LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID = os.environ.get(
-    "LEADERBOARD_DISCORD_BOT_USERS_JOURNAL_ID", ""
-)
