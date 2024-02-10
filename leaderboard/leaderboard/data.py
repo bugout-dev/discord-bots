@@ -1,17 +1,45 @@
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
-class ConfigLeaderboardThreads(BaseModel):
+class RequestMethods(Enum):
+    GET = "get"
+    POST = "post"
+    PUT = "put"
+    DELETE = "delete"
+
+
+class ConfigLeaderboard(BaseModel):
     leaderboard_id: uuid.UUID
-    thread_id: int
+    short_name: str
+    channel_ids: List[int] = Field(default_factory=list)
+
+
+class ConfigRole(BaseModel):
+    id: int
+    name: str
 
 
 class Config(BaseModel):
-    leaderboard_threads: List[ConfigLeaderboardThreads] = Field(default_factory=list)
+    type: str
+    discord_server_id: int
+    discord_roles: List[ConfigRole] = Field(default_factory=list)
+    leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
+
+
+class ResourceConfig(BaseModel):
+    id: Optional[uuid.UUID] = None
+    resource_data: Config
+
+
+class UserIdentity(BaseModel):
+    resource_id: Optional[uuid.UUID] = None
+    identifier: str
+    name: str
 
 
 class LeaderboardInfo(BaseModel):

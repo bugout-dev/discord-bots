@@ -1,31 +1,44 @@
 import argparse
 import asyncio
-import json
 import logging
-import os
 
 from discord.ext import commands
 
-from . import actions, data
+from . import actions
 from .bot import LeaderboardDiscordBot, configure_intents
-from .settings import LEADERBOARD_DISCORD_BOT_TOKEN, discord_env_check
+from .settings import (
+    LEADERBOARD_DISCORD_BOT_TOKEN,
+    LOG_LEVEL,
+    MOONSTREAM_APPLICATION_ID,
+    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=LOG_LEVEL)
+
 logger = logging.getLogger(__name__)
 
 
 def discord_run_handler(args: argparse.Namespace) -> None:
-    config_path = os.path.join(os.getcwd(), args.config)
-    with open(config_path) as ifp:
-        config_json = json.load(ifp)
-    config = data.Config(**config_json)
-
-    discord_env_check()
+    if LEADERBOARD_DISCORD_BOT_TOKEN == "":
+        raise Exception("LEADERBOARD_DISCORD_BOT_TOKEN environment variable is not set")
+    if MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN == "":
+        raise Exception(
+            f"MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN environment variable is not set, configuration fetch unavailable"
+        )
+    if MOONSTREAM_APPLICATION_ID == "":
+        raise Exception(
+            f"MOONSTREAM_APPLICATION_ID environment variable is not set, configuration fetch unavailable"
+        )
 
     intents = configure_intents()
     bot = LeaderboardDiscordBot(
-        command_prefix=commands.when_mentioned_or("?"), intents=intents, config=config
+        command_prefix=commands.when_mentioned_or("?"), intents=intents
     )
+
+    # TODO(kompotkot): Re-write to setters and fall a bot if no configs or users fetched
+    bot.load_bugout_configs()
+    bot.load_bugout_users()
+
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)
 
 
@@ -63,7 +76,6 @@ def main() -> None:
         "-c",
         "--config",
         type=str,
-        required=True,
         help="Path to configuration file",
     )
     parser_discord_run.set_defaults(func=discord_run_handler)
