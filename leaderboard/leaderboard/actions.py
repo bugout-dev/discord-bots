@@ -97,11 +97,19 @@ def auth_middleware(
     guild_owner_id: Optional[int] = None,
 ) -> bool:
     """
+    Allow access if:
+    - user is guild owner
+    - there are no auth roles in configuration yet
+    - user has role specified in configuration
+
     TODO(kompotkot): Use discord @command.has_role modified to work with server configuration
     """
     if guild_owner_id is not None:
         if user_id == guild_owner_id:
             return True
+
+    if len(server_config_roles) == 0:
+        return True
 
     server_config_role_ids_set = set([r.id for r in server_config_roles])
     user_role_ids_set = set([r.id for r in user_roles])
@@ -256,12 +264,14 @@ async def create_server_config(
             "application_id": MOONSTREAM_APPLICATION_ID,
             "resource_data": {
                 "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
-                "leaderboards": [json.loads(l.json()) for l in leaderboards]
-                if leaderboards is not None
-                else [],
-                "discord_auth_roles": [r.dict() for r in roles]
-                if roles is not None
-                else [],
+                "leaderboards": (
+                    [json.loads(l.json()) for l in leaderboards]
+                    if leaderboards is not None
+                    else []
+                ),
+                "discord_auth_roles": (
+                    [r.dict() for r in roles] if roles is not None else []
+                ),
                 "discord_server_id": discord_server_id,
             },
         },
