@@ -3,9 +3,10 @@ import json
 import logging
 import re
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import aiohttp
+import discord
 from bugout.data import BugoutResource
 from discord import Embed
 from discord.guild import Guild
@@ -71,6 +72,22 @@ def prepare_dynamic_embed(
         embed.add_field(name=f["field_name"], value=f["field_value"])
 
     return embed
+
+
+class DynamicSelect(discord.ui.Select):
+    def __init__(
+        self,
+        callback_func: Callable,
+        options: List[discord.SelectOption],
+        placeholder: str = "",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(options=options, placeholder=placeholder, *args, **kwargs)
+        self.callback_func = callback_func
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.callback_func(interaction, self.values)
 
 
 def auth_middleware(
