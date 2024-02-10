@@ -22,7 +22,6 @@ PIP="${PYTHON_ENV_DIR}/bin/pip"
 SCRIPT_DIR="$(realpath $(dirname $0))"
 SECRETS_DIR="${SECRETS_DIR:-/home/ubuntu/leaderboard-secrets}"
 PARAMETERS_ENV_PATH="${SECRETS_DIR}/app.env"
-CONFIG_PATH="${SECRETS_DIR}/config.json"
 USER_SYSTEMD_DIR="${USER_SYSTEMD_DIR:-/home/ubuntu/.config/systemd/user}"
 
 # Discord bots leaderboard service files
