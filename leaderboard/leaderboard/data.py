@@ -16,7 +16,7 @@ class RequestMethods(Enum):
 class ConfigLeaderboard(BaseModel):
     leaderboard_id: uuid.UUID
     short_name: str
-    thread_ids: List[int] = Field(default_factory=list)
+    channel_ids: List[int] = Field(default_factory=list)
 
 
 class ConfigRole(BaseModel):
