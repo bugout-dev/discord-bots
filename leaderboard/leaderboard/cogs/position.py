@@ -38,7 +38,7 @@ class LeaderboardSelectView(discord.ui.View):
         self.leaderboard_id: Optional[str] = None
 
     async def respond_to_select_leaderboard(
-        self, interaction: discord.Interaction, select_items
+        self, interaction: discord.Interaction, select_items: List[str]
     ):
         await interaction.response.defer()
 

@@ -244,7 +244,9 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
 
 
 async def create_server_config(
-    discord_server_id: int, leaderboards: List[data.ConfigLeaderboard]
+    discord_server_id: int,
+    leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
+    roles: Optional[List[data.ConfigRole]] = None,
 ):
     resource: Optional[BugoutResource] = None
     response = await caller(
@@ -254,8 +256,12 @@ async def create_server_config(
             "application_id": MOONSTREAM_APPLICATION_ID,
             "resource_data": {
                 "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
-                "leaderboards": [json.loads(l.json()) for l in leaderboards],
-                "discord_roles": [],
+                "leaderboards": [json.loads(l.json()) for l in leaderboards]
+                if leaderboards is not None
+                else [],
+                "discord_auth_roles": [r.dict() for r in roles]
+                if roles is not None
+                else [],
                 "discord_server_id": discord_server_id,
             },
         },
@@ -269,16 +275,26 @@ async def create_server_config(
 
 
 async def update_server_config(
-    resource_id: uuid.UUID, leaderboards: List[data.ConfigLeaderboard]
+    resource_id: uuid.UUID,
+    leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
+    roles: Optional[List[data.ConfigRole]] = None,
 ) -> Optional[BugoutResource]:
     resource: Optional[BugoutResource] = None
+    if leaderboards is None and roles is None:
+        return resource
+
+    request_data: Dict[str, Any] = {"update": {}, "drop_keys": []}
+    if leaderboards is not None:
+        request_data["update"]["leaderboards"] = [
+            json.loads(l.json()) for l in leaderboards
+        ]
+    if roles is not None:
+        request_data["update"]["discord_auth_roles"] = [r.dict() for r in roles]
+
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
         method=data.RequestMethods.PUT,
-        request_data={
-            "update": {"leaderboards": [json.loads(l.json()) for l in leaderboards]},
-            "drop_keys": [],
-        },
+        request_data=request_data,
         is_auth=True,
     )
 

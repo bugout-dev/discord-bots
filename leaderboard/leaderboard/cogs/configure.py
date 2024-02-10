@@ -1,11 +1,13 @@
+import json
 import logging
 import uuid
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.member import Member
+from discord.role import Role
 
 from .. import actions, data
 from ..settings import (
@@ -66,6 +68,40 @@ class UnlinkLeaderboardModal(discord.ui.Modal, title="Unlink leaderboard"):
         await interaction.response.defer()
 
 
+class RoleSelectView(discord.ui.View):
+    def __init__(self, guild_roles: Sequence[Role], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        async def select_callback(interaction: discord.Interaction, values: List[str]):
+            await self.respond_to_select_role(
+                interaction=interaction, select_items=values
+            )
+
+        self.add_item(
+            actions.DynamicSelect(
+                callback_func=select_callback,
+                options=[
+                    discord.SelectOption(
+                        label=f"{r.name}",
+                        value=json.dumps({"id": r.id, "name": r.name}),
+                    )
+                    for r in guild_roles
+                ],
+                placeholder="Choose a role",
+                max_values=5,
+            )
+        )
+
+        self.selected_roles: List[str] = []
+
+    async def respond_to_select_role(
+        self, interaction: discord.Interaction, select_items: List[str]
+    ):
+        await interaction.response.defer()
+        self.selected_roles = select_items
+        self.stop()
+
+
 class ConfigureView(discord.ui.View):
     def __init__(
         self,
@@ -74,11 +110,26 @@ class ConfigureView(discord.ui.View):
     ):
         super().__init__(*args, **kwargs)
 
+        self.authorized_roles: List[Dict[str, Any]] = []
+
         self.leaderboard_id: Optional[discord.ui.TextInput] = None
         self.short_name: Optional[discord.ui.TextInput] = None
         self.channel_ids: Optional[discord.ui.TextInput] = None
 
         self.unlink_leaderboard_id: Optional[discord.ui.TextInput] = None
+
+    @discord.ui.button(label="Authorize role")
+    async def button_auth_roles(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if interaction.guild is None:
+            self.stop()
+            return
+        role_select_view = RoleSelectView(guild_roles=interaction.guild.roles)
+        await interaction.response.send_message(view=role_select_view, ephemeral=True)
+        await role_select_view.wait()
+        self.authorized_roles = [json.loads(r) for r in role_select_view.selected_roles]
+        self.stop()
 
     @discord.ui.button(label="Link leaderboard")
     async def button_link_leaderboard(
@@ -113,12 +164,14 @@ class ConfigureCog(commands.Cog):
         self,
         guild_id: int,
         server_config: data.ResourceConfig,
-        updated_leaderboards: List[data.ConfigLeaderboard],
+        updated_leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
+        updated_auth_roles: Optional[List[data.ConfigRole]] = None,
     ) -> None:
         if server_config.id is None:
             resource = await actions.create_server_config(
                 discord_server_id=guild_id,
                 leaderboards=updated_leaderboards,
+                roles=updated_auth_roles,
             )
             if resource is None:
                 logger.error(
@@ -131,6 +184,7 @@ class ConfigureCog(commands.Cog):
             resource = await actions.update_server_config(
                 resource_id=server_config.id,
                 leaderboards=updated_leaderboards,
+                roles=updated_auth_roles,
             )
             if resource is None:
                 logger.error(
@@ -138,12 +192,57 @@ class ConfigureCog(commands.Cog):
                 )
                 return
 
-        server_config.resource_data.leaderboards.clear()
-        server_config.resource_data.leaderboards = updated_leaderboards
+        if updated_leaderboards is not None:
+            server_config.resource_data.leaderboards.clear()
+            server_config.resource_data.leaderboards = updated_leaderboards
+        if updated_auth_roles is not None:
+            server_config.resource_data.discord_auth_roles.clear()
+            server_config.resource_data.discord_auth_roles = updated_auth_roles
+
         self.bot.server_configs[guild_id] = server_config
 
         logger.info(
             f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
+        )
+
+    async def handle_auth_roles(
+        self,
+        server_config: data.ResourceConfig,
+        configure_view: ConfigureView,
+        interaction: discord.Interaction,
+        guild_id: int,
+    ) -> None:
+        """
+        Process Authorize role button.
+        """
+        updated_auth_roles: List[data.ConfigRole] = []
+        updated_auth_role_ids: List[int] = []
+        updated_auth_role_names: List[str] = []
+        for r in server_config.resource_data.discord_auth_roles:
+            updated_auth_roles.append(r)
+            updated_auth_role_ids.append(r.id)
+            updated_auth_role_names.append(r.name)
+
+        for new_role in configure_view.authorized_roles:
+            if new_role["id"] not in updated_auth_role_ids:
+                updated_auth_roles.append(
+                    data.ConfigRole(id=new_role["id"], name=new_role["name"])
+                )
+                updated_auth_role_ids.append(new_role["id"])
+                updated_auth_role_names.append(new_role["name"])
+
+        await interaction.followup.send(
+            embed=discord.Embed(
+                description=f"Authorized roles: {', '.join(updated_auth_role_names)}"
+            )
+        )
+
+        self.bot.loop.create_task(
+            self.background_process_configure(
+                guild_id=guild_id,
+                server_config=server_config,
+                updated_auth_roles=updated_auth_roles,
+            )
         )
 
     async def handle_link_new_leaderboard(
@@ -293,7 +392,7 @@ class ConfigureCog(commands.Cog):
                 interaction.user.roles if type(interaction.user) == Member else []
             ),
             server_config_roles=(
-                server_config.resource_data.discord_roles
+                server_config.resource_data.discord_auth_roles
                 if server_config is not None
                 else []
             ),
@@ -311,7 +410,7 @@ class ConfigureCog(commands.Cog):
                 resource_data=data.Config(
                     type=BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
                     discord_server_id=interaction.guild.id,
-                    discord_roles=[],
+                    discord_auth_roles=[],
                     leaderboards=[],
                 ),
             )
@@ -325,7 +424,7 @@ class ConfigureCog(commands.Cog):
         )
 
         allowed_roles: List[str] = [
-            r.name for r in server_config.resource_data.discord_roles
+            r.name for r in server_config.resource_data.discord_auth_roles
         ]
 
         await interaction.response.send_message(
@@ -354,6 +453,14 @@ class ConfigureCog(commands.Cog):
             view=configure_view,
         )
         await configure_view.wait()
+
+        if len(configure_view.authorized_roles) != 0:
+            await self.handle_auth_roles(
+                server_config=server_config,
+                configure_view=configure_view,
+                interaction=interaction,
+                guild_id=interaction.guild.id,
+            )
 
         if configure_view.leaderboard_id is not None:
             await self.handle_link_new_leaderboard(

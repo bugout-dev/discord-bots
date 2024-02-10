@@ -33,7 +33,7 @@ class ConfigRole(BaseModel):
 class Config(BaseModel):
     type: str
     discord_server_id: int
-    discord_roles: List[ConfigRole] = Field(default_factory=list)
+    discord_auth_roles: List[ConfigRole] = Field(default_factory=list)
     leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
 
 
