@@ -47,12 +47,15 @@ class LeaderboardDiscordBot(commands.Bot):
         for guild in self.guilds:
             await self.tree.sync(guild=discord.Object(id=guild.id))
 
+        await self.tree.sync()
+
         logger.info(f"Slash commands synced for {len(self.guilds)} guilds")
 
     async def setup_hook(self):
         # Fetch list of guilds server connected to
         known_guilds: List[Guild] = []
         async for guild in self.fetch_guilds():
+            self.tree.clear_commands(guild=guild)
             known_guilds.append(guild)
 
         # Prepare list of cog instances
