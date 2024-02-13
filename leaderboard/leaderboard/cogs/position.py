@@ -55,6 +55,15 @@ class PositionCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self._slash_command_data = data.SlashCommandData(
+            name="position",
+            description="Search for position in leaderboard",
+            autocomplete_value="identity",
+        )
+
+    def slash_command_data(self) -> data.SlashCommandData:
+        return self._slash_command_data
+
     def prepare_embed(
         self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
     ) -> discord.Embed:
@@ -73,8 +82,10 @@ class PositionCog(commands.Cog):
 
         return embed
 
-    @app_commands.command(name="position", description="Show user results")
-    async def position(self, interaction: discord.Interaction, identity: str):
+    # @app_commands.command(name="position", description="Show user results")
+    async def slash_command_handler(
+        self, interaction: discord.Interaction, identity: str
+    ):
         logger.info(
             actions.prepare_log_message(
                 "/position",
@@ -154,8 +165,8 @@ class PositionCog(commands.Cog):
             )
         )
 
-    @position.autocomplete("identity")
-    async def position_autocompletion(
+    # @slash_command_handler.autocomplete("identity")
+    async def slash_command_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
         autocompletion: List[app_commands.Choice[str]] = []

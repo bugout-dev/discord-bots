@@ -160,6 +160,14 @@ class ConfigureCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self._slash_command_data = data.SlashCommandData(
+            name="configure",
+            description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot",
+        )
+
+    def slash_command_data(self) -> data.SlashCommandData:
+        return self._slash_command_data
+
     async def background_process_configure(
         self,
         guild_id: int,
@@ -362,10 +370,10 @@ class ConfigureCog(commands.Cog):
             )
         )
 
-    @app_commands.command(
-        name="configure", description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot"
-    )
-    async def configure(self, interaction: discord.Interaction):
+    # @app_commands.command(
+    #     name="configure", description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot"
+    # )
+    async def slash_command_handler(self, interaction: discord.Interaction):
         logger.info(
             actions.prepare_log_message(
                 "/configure",

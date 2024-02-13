@@ -15,6 +15,15 @@ class LeaderboardCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self._slash_command_data = data.SlashCommandData(
+            name="leaderboard",
+            description="Leaderboard for on-chain activities",
+            autocomplete_value="id",
+        )
+
+    def slash_command_data(self) -> data.SlashCommandData:
+        return self._slash_command_data
+
     def prepare_embed(
         self,
         l_info: Optional[data.LeaderboardInfo] = None,
@@ -78,11 +87,11 @@ class LeaderboardCog(commands.Cog):
                 f"Unable to send leaderboard results with ID: {str(l_id)} to channel {channel} - {channel.id} in {channel.guild} guild, err: {e}"
             )
 
-    @app_commands.command(
-        name="leaderboard",
-        description="Leaderboard for on-chain activities",
-    )
-    async def leaderboard(self, interaction: discord.Interaction, id: str):
+    # @app_commands.command(
+    #     name="leaderboard",
+    #     description="Leaderboard for on-chain activities",
+    # )
+    async def slash_command_handler(self, interaction: discord.Interaction, id: str):
         logger.info(
             actions.prepare_log_message(
                 "/leaderboard",
@@ -103,8 +112,8 @@ class LeaderboardCog(commands.Cog):
             )
         )
 
-    @leaderboard.autocomplete("id")
-    async def leaderboard_autocompletion(
+    # @leaderboard.autocomplete("id")
+    async def slash_command_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
         autocompletion: List[app_commands.Choice[str]] = []

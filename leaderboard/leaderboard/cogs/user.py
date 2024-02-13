@@ -88,6 +88,13 @@ class UserCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self._slash_command_data = data.SlashCommandData(
+            name="user", description="User settings"
+        )
+
+    def slash_command_data(self) -> data.SlashCommandData:
+        return self._slash_command_data
+
     async def background_process_add_user_identity(
         self, discord_user_id: int, new_ident: data.UserIdentity
     ) -> None:
@@ -233,8 +240,8 @@ class UserCog(commands.Cog):
             )
         )
 
-    @app_commands.command(name="user", description=f"User settings")
-    async def user(self, interaction: discord.Interaction):
+    # @app_commands.command(name="user", description=f"User settings")
+    async def slash_command_handler(self, interaction: discord.Interaction):
         logger.info(
             actions.prepare_log_message(
                 "/user",
