@@ -168,18 +168,29 @@ class ConfigureCog(commands.Cog):
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 
-    async def background_process_configure(
+    async def background_process_link_leaderboard(
         self,
+        interaction: discord.Interaction,
+        new_leaderboard: data.ConfigLeaderboard,
+        server_config: data.ConfigLeaderboard,
         guild_id: int,
-        server_config: data.ResourceConfig,
-        updated_leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
-        updated_auth_roles: Optional[List[data.ConfigRole]] = None,
-    ) -> None:
+    ):
+        l_info = await actions.get_leaderboard_info(l_id=new_leaderboard.leaderboard_id)
+        if l_info is None:
+            await interaction.followup.send(
+                title="",
+                description=f"Leaderboard with ID {str(new_leaderboard.leaderboard_id)} not found",
+            )
+            return
+
+        new_leaderboard.leaderboard_info = l_info
+        updated_leaderboards = server_config.resource_data.leaderboards[:]
+        updated_leaderboards.append(new_leaderboard)
+
         if server_config.id is None:
             resource = await actions.create_server_config(
                 discord_server_id=guild_id,
                 leaderboards=updated_leaderboards,
-                roles=updated_auth_roles,
             )
             if resource is None:
                 logger.error(
@@ -192,6 +203,116 @@ class ConfigureCog(commands.Cog):
             resource = await actions.update_server_config(
                 resource_id=server_config.id,
                 leaderboards=updated_leaderboards,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+                )
+                return
+
+        server_config.resource_data.leaderboards.clear()
+        server_config.resource_data.leaderboards = updated_leaderboards
+
+        self.bot.server_configs[guild_id] = server_config
+
+        await interaction.followup.send(
+            embed=actions.prepare_dynamic_embed(
+                title="New leaderboard linked to Discord server",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Leaderboard ID",
+                        "field_value": str(new_leaderboard.leaderboard_id),
+                    },
+                    {
+                        "field_name": "Name",
+                        "field_value": str(new_leaderboard.short_name),
+                    },
+                    {
+                        "field_name": "Channel IDs",
+                        "field_value": ", ".join(
+                            [str(i) for i in new_leaderboard.channel_ids]
+                        ),
+                    },
+                ],
+            ),
+        )
+
+        logger.info(
+            f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
+        )
+
+    async def background_process_unlink_leaderboard(
+        self,
+        interaction: discord.Interaction,
+        updated_leaderboards: List[data.ConfigLeaderboard],
+        unlink_leaderboard_id: str,
+        server_config: data.ConfigLeaderboard,
+        guild_id: int,
+    ):
+        if server_config.id is None:
+            resource = await actions.create_server_config(
+                discord_server_id=guild_id,
+                leaderboards=updated_leaderboards,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to create resource for new Discord server with ID: {guild_id}"
+                )
+                del self.bot.server_configs[guild_id]
+                return
+            server_config.id = resource.id
+        else:
+            resource = await actions.update_server_config(
+                resource_id=server_config.id,
+                leaderboards=updated_leaderboards,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to update resource with ID: {str(server_config.id)} for discord server with ID: {guild_id}"
+                )
+                return
+
+        server_config.resource_data.leaderboards.clear()
+        server_config.resource_data.leaderboards = updated_leaderboards
+
+        self.bot.server_configs[guild_id] = server_config
+
+        await interaction.followup.send(
+            embed=actions.prepare_dynamic_embed(
+                title="Unlinked leaderboard from Discord server",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Leaderboard ID",
+                        "field_value": str(unlink_leaderboard_id),
+                    },
+                ],
+            ),
+        )
+
+    async def background_process_update_auth_roles(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        server_config: data.ResourceConfig,
+        updated_auth_roles: List[data.ConfigRole],
+    ) -> None:
+        if server_config.id is None:
+            resource = await actions.create_server_config(
+                discord_server_id=guild_id,
+                roles=updated_auth_roles,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to create resource for new Discord server with ID: {guild_id}"
+                )
+                del self.bot.server_configs[guild_id]
+                return
+            server_config.id = resource.id
+        else:
+            resource = await actions.update_server_config(
+                resource_id=server_config.id,
                 roles=updated_auth_roles,
             )
             if resource is None:
@@ -200,14 +321,17 @@ class ConfigureCog(commands.Cog):
                 )
                 return
 
-        if updated_leaderboards is not None:
-            server_config.resource_data.leaderboards.clear()
-            server_config.resource_data.leaderboards = updated_leaderboards
         if updated_auth_roles is not None:
             server_config.resource_data.discord_auth_roles.clear()
             server_config.resource_data.discord_auth_roles = updated_auth_roles
 
         self.bot.server_configs[guild_id] = server_config
+
+        await interaction.followup.send(
+            embed=discord.Embed(
+                description=f"Authorized roles: {', '.join([r.name for r in updated_auth_roles])}"
+            )
+        )
 
         logger.info(
             f"Updated server config in resource with ID: {str(server_config.id)} for guild with ID: {guild_id}"
@@ -225,11 +349,9 @@ class ConfigureCog(commands.Cog):
         """
         updated_auth_roles: List[data.ConfigRole] = []
         updated_auth_role_ids: List[int] = []
-        updated_auth_role_names: List[str] = []
         for r in server_config.resource_data.discord_auth_roles:
             updated_auth_roles.append(r)
             updated_auth_role_ids.append(r.id)
-            updated_auth_role_names.append(r.name)
 
         for new_role in configure_view.authorized_roles:
             if new_role["id"] not in updated_auth_role_ids:
@@ -237,16 +359,10 @@ class ConfigureCog(commands.Cog):
                     data.ConfigRole(id=new_role["id"], name=new_role["name"])
                 )
                 updated_auth_role_ids.append(new_role["id"])
-                updated_auth_role_names.append(new_role["name"])
-
-        await interaction.followup.send(
-            embed=discord.Embed(
-                description=f"Authorized roles: {', '.join(updated_auth_role_names)}"
-            )
-        )
 
         self.bot.loop.create_task(
-            self.background_process_configure(
+            self.background_process_update_auth_roles(
+                interaction=interaction,
                 guild_id=guild_id,
                 server_config=server_config,
                 updated_auth_roles=updated_auth_roles,
@@ -284,41 +400,18 @@ class ConfigureCog(commands.Cog):
                 logger.warning(f"Unable to parse channel ID {x} from input to integer")
                 continue
 
-        updated_leaderboards = server_config.resource_data.leaderboards[:]
-        updated_leaderboards.append(
-            data.ConfigLeaderboard(
-                leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
-                short_name=str(configure_view.short_name),
-                channel_ids=channel_ids,
-            )
-        )
-
-        await interaction.followup.send(
-            embed=actions.prepare_dynamic_embed(
-                title="New leaderboard linked to Discord server",
-                description="",
-                fields=[
-                    {
-                        "field_name": "Leaderboard ID",
-                        "field_value": str(configure_view.leaderboard_id),
-                    },
-                    {
-                        "field_name": "Name",
-                        "field_value": str(configure_view.short_name),
-                    },
-                    {
-                        "field_name": "Channel IDs",
-                        "field_value": ", ".join([str(i) for i in channel_ids]),
-                    },
-                ],
-            ),
+        new_leaderboard = data.ConfigLeaderboard(
+            leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
+            short_name=str(configure_view.short_name),
+            channel_ids=channel_ids,
         )
 
         self.bot.loop.create_task(
-            self.background_process_configure(
-                guild_id=guild_id,
+            self.background_process_link_leaderboard(
+                interaction=interaction,
+                new_leaderboard=new_leaderboard,
                 server_config=server_config,
-                updated_leaderboards=updated_leaderboards,
+                guild_id=guild_id,
             )
         )
 
@@ -349,24 +442,13 @@ class ConfigureCog(commands.Cog):
             )
             return
 
-        await interaction.followup.send(
-            embed=actions.prepare_dynamic_embed(
-                title="Unlinked leaderboard from Discord server",
-                description="",
-                fields=[
-                    {
-                        "field_name": "Leaderboard ID",
-                        "field_value": str(configure_view.unlink_leaderboard_id),
-                    },
-                ],
-            ),
-        )
-
         self.bot.loop.create_task(
-            self.background_process_configure(
-                guild_id=guild_id,
-                server_config=server_config,
+            self.background_process_unlink_leaderboard(
+                interaction=interaction,
                 updated_leaderboards=updated_leaderboards,
+                unlink_leaderboard_id=configure_view.unlink_leaderboard_id,
+                server_config=server_config,
+                guild_id=guild_id,
             )
         )
 

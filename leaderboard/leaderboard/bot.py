@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Callable, Dict, List, Optional, Set
 
@@ -10,6 +11,7 @@ from discord.message import Message
 from . import actions, data
 from .cogs.configure import ConfigureCog
 from .cogs.leaderboard import LeaderboardCog
+from .cogs.leaderboards import LeaderboardsCog
 from .cogs.position import PositionCog
 from .cogs.user import UserCog
 from .settings import (
@@ -19,6 +21,7 @@ from .settings import (
     LEADERBOARD_DISCORD_BOT_NAME,
     MOONSTREAM_APPLICATION_ID,
     MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+    MOONSTREAM_ENGINE_API_URL,
 )
 from .settings import bugout_client as bc
 
@@ -63,6 +66,7 @@ class LeaderboardDiscordBot(commands.Bot):
         for cog in [
             ConfigureCog(self),
             LeaderboardCog(self),
+            LeaderboardsCog(self),
             PingCog(self),
             PositionCog(self),
             UserCog(self),
@@ -90,8 +94,6 @@ class LeaderboardDiscordBot(commands.Bot):
 
         # Generate commands for specified guild and add it to command tree
         for cog in available_cogs_map:
-            is_registered_command_for_cog = False
-
             for guild in known_guilds:
                 is_command_for_guild_registered = False
 
@@ -103,26 +105,18 @@ class LeaderboardDiscordBot(commands.Bot):
                             self.add_command_to_tree(
                                 name=command.renamed, cog=cog, guild=guild
                             )
-                            is_registered_command_for_cog = True
                             is_command_for_guild_registered = True
                             logger.debug(
-                                f"1 Registered {command.renamed} command at {guild.name}"
+                                f"Registered {command.renamed} command at {guild.name}"
                             )
                 if is_command_for_guild_registered is False:
                     # Register for guild command
                     self.add_command_to_tree(
                         name=cog.slash_command_name, cog=cog, guild=guild
                     )
-                    is_registered_command_for_cog = True
                     logger.debug(
-                        f"2 Registered {cog.slash_command_name} command at {guild.name}"
+                        f"Registered {cog.slash_command_name} command at {guild.name}"
                     )
-            if is_registered_command_for_cog is False:
-                # Register default cog and add to self.tree
-                self.add_command_to_tree(name=cog.slash_command_name, cog=cog)
-                logger.debug(
-                    f"3 Registered {cog.slash_command_name} command at {guild.name}"
-                )
 
     def add_command_to_tree(self, name: str, cog, guild: Optional[Guild] = None):
         com: app_commands.Command = app_commands.Command(
@@ -218,6 +212,27 @@ class LeaderboardDiscordBot(commands.Bot):
                     logger.error(e)
         except Exception as e:
             raise Exception(e)
+
+    async def load_leaderboards_info(self) -> None:
+        semaphore = asyncio.Semaphore(4)
+
+        async def load_leaderboard_info(leaderboard: data.ConfigLeaderboard) -> None:
+            url = f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(leaderboard.leaderboard_id)}"
+            response = await actions.caller(url=url, semaphore=semaphore)
+            if response is not None:
+                leaderboard.leaderboard_info = data.LeaderboardInfo(**response)
+
+        all_leaderboards: List[data.ConfigLeaderboard] = []
+        for g_id in self.server_configs:
+            leaderboards = self.server_configs[g_id].resource_data.leaderboards
+            all_leaderboards.extend(leaderboards)
+
+        tasks = []
+        for l in all_leaderboards:
+            task = asyncio.create_task(load_leaderboard_info(leaderboard=l))
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
 
 
 class PingCog(commands.Cog):

@@ -34,6 +34,21 @@ class CogMap(BaseModel):
     slash_command_autocomplete_value: Optional[str] = None
 
 
+class LeaderboardInfo(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: str
+    users_count: int
+    last_updated_at: Optional[datetime] = None
+
+
+class Score(BaseModel):
+    address: str
+    rank: int
+    score: int
+    points_data: Dict[str, Any]
+
+
 class ConfigCommands(BaseModel):
     origin: str
     renamed: str
@@ -43,6 +58,8 @@ class ConfigLeaderboard(BaseModel):
     leaderboard_id: uuid.UUID
     short_name: str
     channel_ids: List[int] = Field(default_factory=list)
+
+    leaderboard_info: Optional[LeaderboardInfo] = None
 
 
 class ConfigRole(BaseModel):
@@ -67,18 +84,3 @@ class UserIdentity(BaseModel):
     resource_id: Optional[uuid.UUID] = None
     identifier: str
     name: str
-
-
-class LeaderboardInfo(BaseModel):
-    id: uuid.UUID
-    title: str
-    description: str
-    users_count: int
-    last_updated_at: datetime
-
-
-class Score(BaseModel):
-    address: str
-    rank: int
-    score: int
-    points_data: Dict[str, Any]
