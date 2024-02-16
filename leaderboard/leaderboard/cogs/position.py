@@ -67,18 +67,16 @@ class PositionCog(commands.Cog):
     def prepare_embed(
         self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
     ) -> discord.Embed:
+        is_complete = l_score.points_data.get("complete")
         embed = discord.Embed(
             title=f"Position {f'at {l_info.title} ' if l_info is not None else ''}leaderboard",
-            description="",
+            description=(
+                "✅ Complete" if is_complete is not None and is_complete is True else ""
+            ),
         )
-        embed.add_field(name="Address", value=l_score.address)
         embed.add_field(name="Rank", value=l_score.rank)
+        embed.add_field(name="Identity", value=l_score.address)
         embed.add_field(name="Score", value=l_score.score)
-
-        embed.add_field(
-            name="Links",
-            value=f"[Address at Starkscan](https://starkscan.co/contract/{str(l_score.address)})",
-        )
 
         return embed
 
