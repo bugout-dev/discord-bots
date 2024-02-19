@@ -13,6 +13,7 @@ from .. import actions, data
 from ..settings import (
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
     LEADERBOARD_DISCORD_BOT_NAME,
+    MOONSTREAM_URL,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ class ConfigureCog(commands.Cog):
         self,
         interaction: discord.Interaction,
         new_leaderboard: data.ConfigLeaderboard,
-        server_config: data.ConfigLeaderboard,
+        server_config: data.ResourceConfig,
         guild_id: int,
     ):
         l_info = await actions.get_leaderboard_info(l_id=new_leaderboard.leaderboard_id)
@@ -247,7 +248,7 @@ class ConfigureCog(commands.Cog):
         interaction: discord.Interaction,
         updated_leaderboards: List[data.ConfigLeaderboard],
         unlink_leaderboard_id: str,
-        server_config: data.ConfigLeaderboard,
+        server_config: data.ResourceConfig,
         guild_id: int,
     ):
         if server_config.id is None:
@@ -527,10 +528,10 @@ class ConfigureCog(commands.Cog):
                     for d in [
                         {
                             "field_name": "Leaderboard ID",
-                            "field_value": str(l.leaderboard_id),
+                            "field_value": f"[{str(l.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
                         },
                         {
-                            "field_name": "Name",
+                            "field_name": "Short name",
                             "field_value": l.short_name,
                         },
                         {

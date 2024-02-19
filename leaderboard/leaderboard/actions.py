@@ -133,7 +133,10 @@ async def caller(
             async with aiohttp.ClientSession() as session:
                 request_method = getattr(session, method.value, session.get)
                 request_kwargs: Dict[str, Any] = {"timeout": timeout, "headers": {}}
-                if method == data.RequestMethods.POST or method == data.RequestMethods.PUT:
+                if (
+                    method == data.RequestMethods.POST
+                    or method == data.RequestMethods.PUT
+                ):
                     request_kwargs["json"] = request_data
                     request_kwargs["headers"]["Content-Type"] = "application/json"
                 if is_auth is True:

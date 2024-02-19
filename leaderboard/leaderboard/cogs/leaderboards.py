@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .. import actions, data
+from ..settings import MOONSTREAM_URL
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +65,12 @@ class LeaderboardsCog(commands.Cog):
                     for l in server_config.resource_data.leaderboards
                     for d in [
                         {
-                            "field_name": "Pointer",
+                            "field_name": "Short name",
                             "field_value": l.short_name,
                         },
                         {
                             "field_name": "Title",
-                            "field_value": l.leaderboard_info.title,
+                            "field_value": f"[{l.leaderboard_info.title}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
                         },
                         {
                             "field_name": "Description",

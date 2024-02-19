@@ -69,7 +69,7 @@ class PositionCog(commands.Cog):
     ) -> discord.Embed:
         is_complete = l_score.points_data.get("complete")
         embed = discord.Embed(
-            title=f"Position {f'at {l_info.title} ' if l_info is not None else ''}leaderboard",
+            title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
             description=(
                 "✅ Complete" if is_complete is not None and is_complete is True else ""
             ),
@@ -126,7 +126,7 @@ class PositionCog(commands.Cog):
             leaderboard_id = leaderboards[0].leaderboard_id
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description=f"Looking for **{identity}** in leaderboard **{leaderboards[0].short_name}**"
+                    description=f"Looking for **{identity}** in **{leaderboards[0].short_name}**"
                 ),
                 ephemeral=True,
             )
