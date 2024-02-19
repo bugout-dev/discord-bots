@@ -37,6 +37,7 @@ def discord_run_handler(args: argparse.Namespace) -> None:
 
     # TODO(kompotkot): Re-write to setters and fall a bot if no configs or users fetched
     bot.load_bugout_configs()
+    asyncio.run(bot.load_leaderboards_info())
     bot.load_bugout_users()
 
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)

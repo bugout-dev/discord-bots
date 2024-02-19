@@ -122,35 +122,41 @@ def auth_middleware(
 
 async def caller(
     url: str,
+    semaphore: asyncio.Semaphore,
     method: data.RequestMethods = data.RequestMethods.GET,
     request_data: Optional[Dict[str, Any]] = None,
     is_auth: bool = False,
     timeout: int = 5,
 ) -> Optional[Any]:
-    try:
-        async with aiohttp.ClientSession() as session:
-            request_method = getattr(session, method.value, session.get)
-            request_kwargs: Dict[str, Any] = {"timeout": timeout, "headers": {}}
-            if method == data.RequestMethods.POST or method == data.RequestMethods.PUT:
-                request_kwargs["json"] = request_data
-                request_kwargs["headers"]["Content-Type"] = "application/json"
-            if is_auth is True:
-                request_kwargs["headers"][
-                    "Authorization"
-                ] = f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}"
-            async with request_method(url, **request_kwargs) as response:
-                response.raise_for_status()
-                json_response = await response.json()
-                return json_response
-    except Exception as e:
-        logger.error(str(e))
-        return None
+    async with semaphore:
+        try:
+            async with aiohttp.ClientSession() as session:
+                request_method = getattr(session, method.value, session.get)
+                request_kwargs: Dict[str, Any] = {"timeout": timeout, "headers": {}}
+                if (
+                    method == data.RequestMethods.POST
+                    or method == data.RequestMethods.PUT
+                ):
+                    request_kwargs["json"] = request_data
+                    request_kwargs["headers"]["Content-Type"] = "application/json"
+                if is_auth is True:
+                    request_kwargs["headers"][
+                        "Authorization"
+                    ] = f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}"
+                async with request_method(url, **request_kwargs) as response:
+                    response.raise_for_status()
+                    json_response = await response.json()
+                    return json_response
+        except Exception as e:
+            logger.error(str(e))
+            return None
 
 
 async def get_leaderboard_info(l_id: uuid.UUID) -> Optional[data.LeaderboardInfo]:
     l_info: Optional[data.LeaderboardInfo] = None
     response = await caller(
-        url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}"
+        url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(l_id)}",
+        semaphore=asyncio.Semaphore(1),
     )
     if response is not None:
         logger.debug(f"Received info for leaderboard with ID: {response.get('id')}")
@@ -162,6 +168,7 @@ async def get_scores(l_id: uuid.UUID) -> Optional[List[data.Score]]:
     l_scores: Optional[List[data.Score]] = None
     response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/?leaderboard_id={str(l_id)}&limit=10&offset=0",
+        semaphore=asyncio.Semaphore(1),
         timeout=30,
     )
     if response is not None:
@@ -192,6 +199,7 @@ async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
     l_position: Optional[data.Score] = None
     response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
+        semaphore=asyncio.Semaphore(1),
     )
     if response is not None:
         l_scores = [data.Score(**s) for s in response]
@@ -218,6 +226,7 @@ async def push_user_identity(
     resource: Optional[BugoutResource] = None
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources",
+        semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.POST,
         request_data={
             "application_id": MOONSTREAM_APPLICATION_ID,
@@ -241,6 +250,7 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
     removed_resource_id: Optional[uuid.UUID] = None
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
+        semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.DELETE,
         is_auth=True,
     )
@@ -259,6 +269,7 @@ async def create_server_config(
     resource: Optional[BugoutResource] = None
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources",
+        semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.POST,
         request_data={
             "application_id": MOONSTREAM_APPLICATION_ID,
@@ -303,6 +314,7 @@ async def update_server_config(
 
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
+        semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.PUT,
         request_data=request_data,
         is_auth=True,

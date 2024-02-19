@@ -55,26 +55,35 @@ class PositionCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        self._slash_command_data = data.SlashCommandData(
+            name="position",
+            description="Search for position in leaderboard",
+            autocomplete_value="identity",
+        )
+
+    def slash_command_data(self) -> data.SlashCommandData:
+        return self._slash_command_data
+
     def prepare_embed(
         self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
     ) -> discord.Embed:
+        is_complete = l_score.points_data.get("complete")
         embed = discord.Embed(
-            title=f"Position {f'at {l_info.title} ' if l_info is not None else ''}leaderboard",
-            description="",
+            title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
+            description=(
+                "✅ Complete" if is_complete is not None and is_complete is True else ""
+            ),
         )
-        embed.add_field(name="Address", value=l_score.address)
         embed.add_field(name="Rank", value=l_score.rank)
+        embed.add_field(name="Identity", value=l_score.address)
         embed.add_field(name="Score", value=l_score.score)
-
-        embed.add_field(
-            name="Links",
-            value=f"[Address at Starkscan](https://starkscan.co/contract/{str(l_score.address)})",
-        )
 
         return embed
 
-    @app_commands.command(name="position", description="Show user results")
-    async def position(self, interaction: discord.Interaction, identity: str):
+    # @app_commands.command(name="position", description="Show user results")
+    async def slash_command_handler(
+        self, interaction: discord.Interaction, identity: str
+    ):
         logger.info(
             actions.prepare_log_message(
                 "/position",
@@ -117,7 +126,7 @@ class PositionCog(commands.Cog):
             leaderboard_id = leaderboards[0].leaderboard_id
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    description=f"Looking for **{identity}** in leaderboard **{leaderboards[0].short_name}**"
+                    description=f"Looking for **{identity}** in **{leaderboards[0].short_name}**"
                 ),
                 ephemeral=True,
             )
@@ -154,8 +163,8 @@ class PositionCog(commands.Cog):
             )
         )
 
-    @position.autocomplete("identity")
-    async def position_autocompletion(
+    # @slash_command_handler.autocomplete("identity")
+    async def slash_command_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:
         autocompletion: List[app_commands.Choice[str]] = []
