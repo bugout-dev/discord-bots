@@ -119,18 +119,18 @@ class ConfigureView(discord.ui.View):
 
         self.unlink_leaderboard_id: Optional[discord.ui.TextInput] = None
 
-    @discord.ui.button(label="Authorize role")
-    async def button_auth_roles(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if interaction.guild is None:
-            self.stop()
-            return
-        role_select_view = RoleSelectView(guild_roles=interaction.guild.roles)
-        await interaction.response.send_message(view=role_select_view, ephemeral=True)
-        await role_select_view.wait()
-        self.authorized_roles = [json.loads(r) for r in role_select_view.selected_roles]
-        self.stop()
+    # @discord.ui.button(label="Authorize role")
+    # async def button_auth_roles(
+    #     self, interaction: discord.Interaction, button: discord.ui.Button
+    # ):
+    #     if interaction.guild is None:
+    #         self.stop()
+    #         return
+    #     role_select_view = RoleSelectView(guild_roles=interaction.guild.roles)
+    #     await interaction.response.send_message(view=role_select_view, ephemeral=True)
+    #     await role_select_view.wait()
+    #     self.authorized_roles = [json.loads(r) for r in role_select_view.selected_roles]
+    #     self.stop()
 
     @discord.ui.button(label="Link leaderboard")
     async def button_link_leaderboard(
