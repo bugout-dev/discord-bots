@@ -67,12 +67,19 @@ class PositionCog(commands.Cog):
     def prepare_embed(
         self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
     ) -> discord.Embed:
+        description = ""
         is_complete = l_score.points_data.get("complete")
+        if is_complete is not None:
+            description += "Requirement: Complete\n"
+
+        mustReach = l_score.points_data.get("mustReach")
+        cap = l_score.points_data.get("cap")
+        if mustReach is not None and cap is not None:
+            description += f"Must Reach: {mustReach} / {cap}"
+
         embed = discord.Embed(
             title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
-            description=(
-                "✅ Complete" if is_complete is not None and is_complete is True else ""
-            ),
+            description=description,
         )
         embed.add_field(name="Rank", value=l_score.rank)
         embed.add_field(name="Identity", value=l_score.address)
