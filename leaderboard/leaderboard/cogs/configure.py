@@ -518,28 +518,36 @@ class ConfigureCog(commands.Cog):
             r.name for r in server_config.resource_data.discord_auth_roles
         ]
 
+        fields = []
+        list_of_linked_leaderboard_ids = []
+        for leaderboard in server_config.resource_data.leaderboards:
+            list_of_linked_leaderboard_ids.append(str(leaderboard.leaderboard_id))
+            for ch in leaderboard.channel_ids:
+                if ch == interaction.channel.id:
+                    fields.extend(
+                        [
+                            {
+                                "field_name": "Leaderboard ID",
+                                "field_value": f"[{str(leaderboard.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={leaderboard.leaderboard_id})",
+                            },
+                            {
+                                "field_name": "Short name",
+                                "field_value": leaderboard.short_name,
+                            },
+                            {
+                                "field_name": "Channel IDs",
+                                "field_value": ", ".join(
+                                    [str(i) for i in leaderboard.channel_ids]
+                                ),
+                            },
+                        ]
+                    )
+
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
                 title="Leaderboard bot configuration of Discord server",
-                description=f"Allowed roles to manage Discord server configuration: {', '.join(allowed_roles) if len(allowed_roles) > 0 else '**-**'}",
-                fields=[
-                    d
-                    for l in server_config.resource_data.leaderboards
-                    for d in [
-                        {
-                            "field_name": "Leaderboard ID",
-                            "field_value": f"[{str(l.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
-                        },
-                        {
-                            "field_name": "Short name",
-                            "field_value": l.short_name,
-                        },
-                        {
-                            "field_name": "Channel IDs",
-                            "field_value": ", ".join([str(i) for i in l.channel_ids]),
-                        },
-                    ]
-                ],
+                description=f"Allowed roles to manage Discord server configuration: {', '.join(allowed_roles) if len(allowed_roles) > 0 else '**-**'}\n\nLinked leaderboard IDs: {', '.join(list_of_linked_leaderboard_ids)  if len(list_of_linked_leaderboard_ids) > 0 else '**-**'}",
+                fields=fields,
             ),
             view=configure_view,
         )
