@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import discord
 from discord import app_commands
@@ -72,18 +72,47 @@ class PositionCog(commands.Cog):
         if is_complete is not None:
             description += "Requirement: Complete\n"
 
-        mustReach = l_score.points_data.get("mustReach")
+        mustReach = l_score.points_data.get("must_reach")
         cap = l_score.points_data.get("cap")
         if mustReach is not None and cap is not None:
             description += f"Must Reach: {mustReach} / {cap}"
+
+        address_name = "Identity"
+        score = str(l_score.score)
+        try:
+            score_details_raw = l_score.points_data.get("score_details", {})
+            score_details = data.ScoreDetails(**score_details_raw)
+            score_updated = ""
+            if score_details.prefix is not None:
+                score_updated += score_details.prefix
+            if (
+                score_details.conversion is not None
+                and score_details.conversion_vector is not None
+            ):
+                score_converted: Union[int, float] = l_score.score
+                if score_details.conversion_vector == "divide":
+                    score_converted = score_converted / score_details.conversion
+                score_updated += str(score_converted)
+
+            else:
+                score_updated += str(l_score.score)
+            if score_details.postfix is not None:
+                score_updated += score_details.postfix
+
+            score = score_updated
+
+            if score_details.address_name is not None:
+                address_name = score_details.address_name
+        except:
+            pass
 
         embed = discord.Embed(
             title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
             description=description,
         )
         embed.add_field(name="Rank", value=l_score.rank)
-        embed.add_field(name="Identity", value=l_score.address)
-        embed.add_field(name="Score", value=l_score.score)
+        embed.add_field(name=address_name, value=l_score.address)
+        embed.add_field(name="Score", value=score)
 
         return embed
 

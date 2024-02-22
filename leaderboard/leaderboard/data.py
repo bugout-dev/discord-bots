@@ -49,6 +49,14 @@ class Score(BaseModel):
     points_data: Dict[str, Any]
 
 
+class ScoreDetails(BaseModel):
+    prefix: Optional[str] = None
+    postfix: Optional[str] = None
+    conversion: Optional[int] = None
+    conversion_vector: Optional[str] = None
+    address_name: Optional[str] = None
+
+
 class ConfigCommands(BaseModel):
     origin: str
     renamed: str

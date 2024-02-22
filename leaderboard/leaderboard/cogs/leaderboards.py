@@ -70,11 +70,15 @@ class LeaderboardsCog(commands.Cog):
                         },
                         {
                             "field_name": "Title",
-                            "field_value": f"[{l.leaderboard_info.title}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
+                            "field_value": f"[{l.leaderboard_info.title if l.leaderboard_info is not None else '-'}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
                         },
                         {
                             "field_name": "Description",
-                            "field_value": l.leaderboard_info.description,
+                            "field_value": (
+                                l.leaderboard_info.description
+                                if l.leaderboard_info is not None
+                                else "-"
+                            ),
                         },
                     ]
                 ],

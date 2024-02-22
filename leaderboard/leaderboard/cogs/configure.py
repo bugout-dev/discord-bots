@@ -179,8 +179,9 @@ class ConfigureCog(commands.Cog):
         l_info = await actions.get_leaderboard_info(l_id=new_leaderboard.leaderboard_id)
         if l_info is None:
             await interaction.followup.send(
-                title="",
-                description=f"Leaderboard with ID {str(new_leaderboard.leaderboard_id)} not found",
+                embed=discord.Embed(
+                    description=f"Leaderboard with ID {str(new_leaderboard.leaderboard_id)} not found"
+                ),
             )
             return
 
@@ -447,7 +448,7 @@ class ConfigureCog(commands.Cog):
             self.background_process_unlink_leaderboard(
                 interaction=interaction,
                 updated_leaderboards=updated_leaderboards,
-                unlink_leaderboard_id=configure_view.unlink_leaderboard_id,
+                unlink_leaderboard_id=str(configure_view.unlink_leaderboard_id),
                 server_config=server_config,
                 guild_id=guild_id,
             )
@@ -522,26 +523,27 @@ class ConfigureCog(commands.Cog):
         list_of_linked_leaderboard_ids = []
         for leaderboard in server_config.resource_data.leaderboards:
             list_of_linked_leaderboard_ids.append(str(leaderboard.leaderboard_id))
-            for ch in leaderboard.channel_ids:
-                if ch == interaction.channel.id:
-                    fields.extend(
-                        [
-                            {
-                                "field_name": "Leaderboard ID",
-                                "field_value": f"[{str(leaderboard.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={leaderboard.leaderboard_id})",
-                            },
-                            {
-                                "field_name": "Short name",
-                                "field_value": leaderboard.short_name,
-                            },
-                            {
-                                "field_name": "Channel IDs",
-                                "field_value": ", ".join(
-                                    [str(i) for i in leaderboard.channel_ids]
-                                ),
-                            },
-                        ]
-                    )
+            if interaction.channel is not None:
+                for ch in leaderboard.channel_ids:
+                    if ch == interaction.channel.id:
+                        fields.extend(
+                            [
+                                {
+                                    "field_name": "Leaderboard ID",
+                                    "field_value": f"[{str(leaderboard.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={leaderboard.leaderboard_id})",
+                                },
+                                {
+                                    "field_name": "Short name",
+                                    "field_value": leaderboard.short_name,
+                                },
+                                {
+                                    "field_name": "Channel IDs",
+                                    "field_value": ", ".join(
+                                        [str(i) for i in leaderboard.channel_ids]
+                                    ),
+                                },
+                            ]
+                        )
 
         await interaction.response.send_message(
             embed=actions.prepare_dynamic_embed(
@@ -550,6 +552,7 @@ class ConfigureCog(commands.Cog):
                 fields=fields,
             ),
             view=configure_view,
+            ephemeral=True,
         )
         await configure_view.wait()
 
