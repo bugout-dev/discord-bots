@@ -67,20 +67,14 @@ class PositionCog(commands.Cog):
     def prepare_embed(
         self, l_score: data.Score, l_info: Optional[data.LeaderboardInfo] = None
     ) -> discord.Embed:
-        description = ""
-        is_complete = l_score.points_data.get("complete")
-        if is_complete is not None:
-            description += "Requirement: Complete\n"
+        # TODO(kompotkot): Write normal score_details parser
 
-        mustReach = l_score.points_data.get("must_reach")
-        cap = l_score.points_data.get("cap")
-        if mustReach is not None and cap is not None:
-            description += f"Must Reach: {mustReach} / {cap}"
+        score_details_raw = l_score.points_data.get("score_details", {})
 
         address_name = "Identity"
         score = str(l_score.score)
         try:
-            score_details_raw = l_score.points_data.get("score_details", {})
+            # Score field render
             score_details = data.ScoreDetails(**score_details_raw)
             score_updated = ""
             if score_details.prefix is not None:
@@ -89,22 +83,81 @@ class PositionCog(commands.Cog):
                 score_details.conversion is not None
                 and score_details.conversion_vector is not None
             ):
-                score_converted: Union[int, float] = l_score.score
-                if score_details.conversion_vector == "divide":
-                    score_converted = score_converted / score_details.conversion
+                score_converted = actions.score_converter(
+                    source=l_score.score,
+                    conversion=score_details.conversion,
+                    conversion_vector=score_details.conversion_vector,
+                )
                 score_updated += str(score_converted)
-
             else:
                 score_updated += str(l_score.score)
+
             if score_details.postfix is not None:
                 score_updated += score_details.postfix
 
             score = score_updated
+        except:
+            pass
 
+        try:
+            # Identity render
             if score_details.address_name is not None:
                 address_name = score_details.address_name
         except:
             pass
+
+        description = ""
+        is_complete = l_score.points_data.get("complete")
+        if is_complete is not None:
+            description += "Requirement: Complete\n"
+
+        must_reach = l_score.points_data.get("must_reach")
+        must_reach_counter = l_score.points_data.get("must_reach_counter")
+        must_reach_line = ""
+        if must_reach is not None and must_reach_counter is not None:
+            must_reach_line += f"Must Reach: {must_reach_counter} / {must_reach}"
+            must_reach_line += "\n"
+
+        cap = l_score.points_data.get("cap")
+        cap_line = ""
+        if cap is not None:
+            cap_line += f"Cap: {cap}"
+
+        try:
+            # Description render
+            score_details = data.ScoreDetails(**score_details_raw)
+            if (
+                score_details.conversion is not None
+                and score_details.conversion_vector is not None
+            ):
+                if must_reach is not None and must_reach_counter is not None:
+                    must_reach_converted = actions.score_converter(
+                        source=must_reach,
+                        conversion=score_details.conversion,
+                        conversion_vector=score_details.conversion_vector,
+                    )
+                    must_reach_counter_converted = actions.score_converter(
+                        source=must_reach_counter,
+                        conversion=score_details.conversion,
+                        conversion_vector=score_details.conversion_vector,
+                    )
+                cap_converted = actions.score_converter(
+                    source=cap,
+                    conversion=score_details.conversion,
+                    conversion_vector=score_details.conversion_vector,
+                )
+
+                must_reach_line = f"Must Reach: {must_reach_counter_converted} / {int(must_reach_converted)}"
+                cap_line = f"Cap: {int(cap_converted)}"
+                if score_details.postfix is not None:
+                    must_reach_line += score_details.postfix
+                    cap_line += score_details.postfix
+                must_reach_line += "\n"
+        except:
+            pass
+
+        description += must_reach_line
+        description += cap_line
 
         embed = discord.Embed(
             title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
