@@ -36,6 +36,14 @@ class QueryNotValid(Exception):
     """
 
 
+def score_converter(
+    source: int, conversion: int, conversion_vector: str
+) -> Union[int, float]:
+    if conversion_vector == "divide":
+        return source / conversion
+    return source
+
+
 def prepare_log_message(
     action: str,
     action_type: str,

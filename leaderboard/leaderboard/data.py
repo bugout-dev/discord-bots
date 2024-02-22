@@ -5,8 +5,8 @@ from typing import Any, Coroutine, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-MESSAGE_LEADERBOARD_NOT_FOUND = "Leaderboard not found"
-MESSAGE_POSITION_NOT_FOUND = "Leaderboard position not found"
+MESSAGE_LEADERBOARD_NOT_FOUND = "Not found"
+MESSAGE_POSITION_NOT_FOUND = "Position not found"
 MESSAGE_CHANNEL_NOT_FOUND = "Discord channel not found"
 MESSAGE_GUILD_NOT_FOUND = "Discord guild not found"
 MESSAGE_ACCESS_DENIED = "Access denied"
@@ -47,6 +47,14 @@ class Score(BaseModel):
     rank: int
     score: int
     points_data: Dict[str, Any]
+
+
+class ScoreDetails(BaseModel):
+    prefix: Optional[str] = None
+    postfix: Optional[str] = None
+    conversion: Optional[int] = None
+    conversion_vector: Optional[str] = None
+    address_name: Optional[str] = None
 
 
 class ConfigCommands(BaseModel):
