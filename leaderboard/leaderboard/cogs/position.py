@@ -241,7 +241,8 @@ class PositionCog(commands.Cog):
         )
         if l_score is None:
             await interaction.followup.send(
-                embed=discord.Embed(description=data.MESSAGE_POSITION_NOT_FOUND)
+                embed=discord.Embed(description=data.MESSAGE_POSITION_NOT_FOUND),
+                ephemeral=True,
             )
             return
 
