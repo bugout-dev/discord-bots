@@ -6,10 +6,10 @@ StartLimitBurst=3
 
 [Service]
 WorkingDirectory=/home/ubuntu/discord-bots/leaderboard
-EnvironmentFile=/home/ubuntu/leaderboard-secrets/app.env
+EnvironmentFile=/home/ubuntu/discord-bots-leaderboard-secrets/app.env
 Restart=on-failure
 RestartSec=15s
-ExecStart=/home/ubuntu/leaderboard-env/bin/python -m leaderboard.cli discord run
+ExecStart=/home/ubuntu/discord-bots-leaderboard-env/bin/python -m leaderboard.cli discord run
 SyslogIdentifier=discord-bots-leaderboard
 
 [Install]
