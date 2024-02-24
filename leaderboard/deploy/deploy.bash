@@ -16,11 +16,11 @@ PREFIX_CRIT="${C_RED}[CRIT]${C_RESET} [$(date +%d-%m\ %T)]"
 # Main
 APP_DIR="${APP_DIR:-/home/ubuntu/discord-bots/leaderboard}"
 AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-PYTHON_ENV_DIR="${PYTHON_ENV_DIR:-/home/ubuntu/leaderboard-env}"
+PYTHON_ENV_DIR="${PYTHON_ENV_DIR:-/home/ubuntu/discord-bots-leaderboard-env}"
 PYTHON="${PYTHON_ENV_DIR}/bin/python"
 PIP="${PYTHON_ENV_DIR}/bin/pip"
 SCRIPT_DIR="$(realpath $(dirname $0))"
-SECRETS_DIR="${SECRETS_DIR:-/home/ubuntu/leaderboard-secrets}"
+SECRETS_DIR="${SECRETS_DIR:-/home/ubuntu/discord-bots-leaderboard-secrets}"
 PARAMETERS_ENV_PATH="${SECRETS_DIR}/app.env"
 USER_SYSTEMD_DIR="${USER_SYSTEMD_DIR:-/home/ubuntu/.config/systemd/user}"
 
@@ -41,18 +41,21 @@ echo -e "${PREFIX_INFO} Installing Python dependencies"
 
 echo
 echo
-echo -e "${PREFIX_INFO} Install checkenv"
-HOME=/home/ubuntu /usr/local/go/bin/go install github.com/bugout-dev/checkenv@latest
+echo -e "${PREFIX_INFO} Add instance local IP and AWS region to parameters"
+echo "AWS_LOCAL_IPV4=$(ec2metadata --local-ipv4)" > "${PARAMETERS_ENV_PATH}"
+echo "AWS_REGION=${AWS_DEFAULT_REGION}" >> "${PARAMETERS_ENV_PATH}"
 
 echo
 echo
 echo -e "${PREFIX_INFO} Retrieving deployment parameters"
-if [ ! -d "${SECRETS_DIR}" ]; then
-  mkdir "${SECRETS_DIR}"
-  echo -e "${PREFIX_WARN} Created new secrets directory"
-fi
-# AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}" /home/ubuntu/go/bin/checkenv show aws_ssm+leaderboard:true,bot:true > "${PARAMETERS_ENV_PATH}"
-# chmod 0640 "${PARAMETERS_ENV_PATH}"
+LEADERBOARD_DISCORD_BOT_TOKEN=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name LEADERBOARD_DISCORD_BOT_TOKEN)
+echo "LEADERBOARD_DISCORD_BOT_TOKEN=${LEADERBOARD_DISCORD_BOT_TOKEN}" >> "${PARAMETERS_ENV_PATH}"
+
+MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --with-decryption --name MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN)
+echo "MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN=${MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}" >> "${PARAMETERS_ENV_PATH}"
+
+MOONSTREAM_APPLICATION_ID=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name MOONSTREAM_APPLICATION_ID)
+echo "MOONSTREAM_APPLICATION_ID=${MOONSTREAM_APPLICATION_ID}" >> "${PARAMETERS_ENV_PATH}"
 
 echo
 echo
