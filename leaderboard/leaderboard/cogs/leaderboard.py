@@ -21,6 +21,7 @@ class LeaderboardCog(commands.Cog):
             autocomplete_value="id",
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 

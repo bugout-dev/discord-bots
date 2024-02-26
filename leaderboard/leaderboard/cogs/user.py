@@ -92,6 +92,7 @@ class UserCog(commands.Cog):
             name="user", description="User settings"
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 

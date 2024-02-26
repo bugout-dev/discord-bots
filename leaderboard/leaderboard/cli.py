@@ -6,12 +6,7 @@ from discord.ext import commands
 
 from . import actions
 from .bot import LeaderboardDiscordBot, configure_intents
-from .settings import (
-    LEADERBOARD_DISCORD_BOT_TOKEN,
-    LOG_LEVEL,
-    MOONSTREAM_APPLICATION_ID,
-    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
-)
+from .settings import LEADERBOARD_DISCORD_BOT_TOKEN, LOG_LEVEL
 
 logging.basicConfig(level=LOG_LEVEL)
 
@@ -21,24 +16,15 @@ logger = logging.getLogger(__name__)
 def discord_run_handler(args: argparse.Namespace) -> None:
     if LEADERBOARD_DISCORD_BOT_TOKEN == "":
         raise Exception("LEADERBOARD_DISCORD_BOT_TOKEN environment variable is not set")
-    if MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN == "":
-        raise Exception(
-            f"MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN environment variable is not set, configuration fetch unavailable"
-        )
-    if MOONSTREAM_APPLICATION_ID == "":
-        raise Exception(
-            f"MOONSTREAM_APPLICATION_ID environment variable is not set, configuration fetch unavailable"
-        )
 
     intents = configure_intents()
-    bot = LeaderboardDiscordBot(
-        command_prefix=commands.when_mentioned_or("?"), intents=intents
-    )
+    bot = LeaderboardDiscordBot(command_prefix=commands.when_mentioned, intents=intents)
 
-    # TODO(kompotkot): Re-write to setters and fall a bot if no configs or users fetched
-    bot.load_bugout_configs()
-    asyncio.run(bot.load_leaderboards_info())
-    bot.load_bugout_users()
+    bot.bugout_connection = not args.no_bugout
+    if bot.bugout_connection is True:
+        bot.load_bugout_configs()
+        asyncio.run(bot.load_leaderboards_info())
+        bot.load_bugout_users()
 
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)
 
@@ -78,6 +64,11 @@ def main() -> None:
         "--config",
         type=str,
         help="Path to configuration file",
+    )
+    parser_discord_run.add_argument(
+        "--no-bugout",
+        action="store_true",
+        help="Specify to run bot without connection to Bugout application",
     )
     parser_discord_run.set_defaults(func=discord_run_handler)
 

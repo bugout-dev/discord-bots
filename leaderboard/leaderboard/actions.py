@@ -21,8 +21,8 @@ from .settings import (
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
     COLORS,
     MOONSTREAM_APPLICATION_ID,
+    MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     MOONSTREAM_ENGINE_API_URL,
-    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ async def caller(
                 if is_auth is True:
                     request_kwargs["headers"][
                         "Authorization"
-                    ] = f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}"
+                    ] = f"Bearer {MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN}"
                 async with request_method(url, **request_kwargs) as response:
                     response.raise_for_status()
                     json_response = await response.json()

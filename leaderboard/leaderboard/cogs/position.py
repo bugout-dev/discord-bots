@@ -61,6 +61,7 @@ class PositionCog(commands.Cog):
             autocomplete_value="identity",
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 

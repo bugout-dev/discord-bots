@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from typing import Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import discord
+from bugout.data import BugoutResource
 from discord import app_commands
 from discord.ext import commands
 from discord.guild import Guild
@@ -20,10 +21,13 @@ from .settings import (
     COLORS,
     LEADERBOARD_DISCORD_BOT_NAME,
     MOONSTREAM_APPLICATION_ID,
+    MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
+    MOONSTREAM_DISCORD_LINK,
     MOONSTREAM_ENGINE_API_URL,
-    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+    MOONSTREAM_THUMBNAIL_LOGO_URL,
 )
 from .settings import bugout_client as bc
+from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +43,91 @@ class LeaderboardDiscordBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.server_configs: Dict[int, data.ResourceConfig] = {}
-        self.user_idents: Dict[int, List[data.UserIdentity]] = {}
+        self._bugout_connection: bool
+
+        self._server_configs: Dict[int, data.ResourceConfig] = {}
+        self._user_idents: Dict[int, List[data.UserIdentity]] = {}
+
+    @property
+    def bugout_connection(self):
+        return self._bugout_connection
+
+    @bugout_connection.setter
+    def bugout_connection(self, connection: bool):
+        self._bugout_connection = False
+        if connection is False:
+            return
+
+        if MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN == "":
+            logger.warning(
+                f"MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN environment variable is not set, configuration fetch unavailable"
+            )
+            return
+
+        if MOONSTREAM_APPLICATION_ID == "":
+            logger.warning(
+                f"MOONSTREAM_APPLICATION_ID environment variable is not set, configuration fetch unavailable"
+            )
+            return
+
+        try:
+            bugout_application = bc.get_application(
+                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
+                application_id=MOONSTREAM_APPLICATION_ID,
+            )
+            logger.info(
+                f"Connected to Bugout application {bugout_application.name} with ID {bugout_application.id}"
+            )
+        except Exception:
+            logger.warning("Unable to establish connection with Bugout application")
+            return
+
+        self._bugout_connection = True
+
+    @property
+    def server_configs(self):
+        return self._server_configs
+
+    def set_server_configs_from_resource(self, resource: BugoutResource):
+        try:
+            discord_server_id = resource.resource_data["discord_server_id"]
+            self._server_configs[discord_server_id] = data.ResourceConfig(
+                id=resource.id, resource_data=data.Config(**resource.resource_data)
+            )
+        except KeyError:
+            logger.warning(f"Malformed resource with ID: {str(resource.id)}")
+        except Exception as e:
+            logger.error(e)
+
+    def set_server_configs_leaderboards(
+        self, leaderboard: data.ConfigLeaderboard, leaderboard_info: Any
+    ):
+        try:
+            leaderboard.leaderboard_info = data.LeaderboardInfo(**leaderboard_info)
+        except Exception as e:
+            logger.error(e)
+
+    @property
+    def user_idents(self):
+        return self._user_idents
+
+    def set_user_idents_from_resource(self, resource: BugoutResource):
+        try:
+            discord_user_id = resource.resource_data["discord_user_id"]
+            fetched_identity = data.UserIdentity(
+                resource_id=resource.id,
+                identifier=resource.resource_data["identifier"],
+                name=resource.resource_data["name"],
+            )
+            existing_identities = self._user_idents.get(discord_user_id)
+            if existing_identities is None:
+                self._user_idents[discord_user_id] = [fetched_identity]
+            else:
+                self._user_idents[discord_user_id].append(fetched_identity)
+        except KeyError:
+            logger.warning(f"Malformed resource with ID: {str(resource.id)}")
+        except Exception as e:
+            logger.error(e)
 
     async def on_ready(self):
         logger.info(
@@ -55,12 +142,6 @@ class LeaderboardDiscordBot(commands.Bot):
         logger.info(f"Slash commands synced for {len(self.guilds)} guilds")
 
     async def setup_hook(self):
-        # Fetch list of guilds server connected to
-        known_guilds: List[Guild] = []
-        async for guild in self.fetch_guilds():
-            self.tree.clear_commands(guild=guild)
-            known_guilds.append(guild)
-
         # Prepare list of cog instances
         available_cogs_map: List[data.CogMap] = []
         for cog in [
@@ -71,26 +152,31 @@ class LeaderboardDiscordBot(commands.Bot):
             PositionCog(self),
             UserCog(self),
         ]:
-            slash_command_data = cog.slash_command_data()
             cog_map = data.CogMap(
                 cog=cog,
-                slash_command_name=slash_command_data.name,
-                slash_command_description=slash_command_data.description,
+                slash_command_name=cog.slash_command_data.name,
+                slash_command_description=cog.slash_command_data.description,
                 slash_command_callback=cog.slash_command_handler,
             )
             try:
                 cog_map.slash_command_autocompletion = cog.slash_command_autocompletion
                 cog_map.slash_command_autocomplete_value = (
-                    slash_command_data.autocomplete_value
+                    cog.slash_command_data.autocomplete_value
                 )
             except:
                 logger.debug(
-                    f"Passing cog with slash command {slash_command_data.name}, no autocompletion"
+                    f"Passing cog with slash command {cog.slash_command_data.name}, no autocompletion"
                 )
 
             available_cogs_map.append(cog_map)
 
             await self.add_cog(cog)
+
+        # Fetch list of guilds server connected to
+        known_guilds: List[Guild] = []
+        async for guild in self.fetch_guilds():
+            self.tree.clear_commands(guild=guild)
+            known_guilds.append(guild)
 
         # Generate commands for specified guild and add it to command tree
         for cog in available_cogs_map:
@@ -107,18 +193,21 @@ class LeaderboardDiscordBot(commands.Bot):
                             )
                             is_command_for_guild_registered = True
                             logger.debug(
-                                f"Registered {command.renamed} command at {guild.name}"
+                                f"Registered unique command  {command.renamed} at {guild.name}"
                             )
                 if is_command_for_guild_registered is False:
-                    # Register for guild command
+                    # Register common command in guild
                     self.add_command_to_tree(
                         name=cog.slash_command_name, cog=cog, guild=guild
                     )
                     logger.debug(
-                        f"Registered {cog.slash_command_name} command at {guild.name}"
+                        f"Registered command {cog.slash_command_name} at {guild.name}"
                     )
 
     def add_command_to_tree(self, name: str, cog, guild: Optional[Guild] = None):
+        """
+        Add application command to the command tree.
+        """
         com: app_commands.Command = app_commands.Command(
             name=name,
             description=cog.slash_command_description,
@@ -154,7 +243,7 @@ class LeaderboardDiscordBot(commands.Bot):
     def load_bugout_users(self) -> None:
         try:
             response = bc.list_resources(
-                token=MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
                 params={
                     "application_id": MOONSTREAM_APPLICATION_ID,
                     "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
@@ -164,31 +253,14 @@ class LeaderboardDiscordBot(commands.Bot):
             logger.info(f"Fetched identities of {len(response.resources)} users")
 
             for r in response.resources:
-                try:
-                    discord_user_id = r.resource_data["discord_user_id"]
-                    fetched_identity = data.UserIdentity(
-                        resource_id=r.id,
-                        identifier=r.resource_data["identifier"],
-                        name=r.resource_data["name"],
-                    )
-
-                    identities = self.user_idents.get(discord_user_id)
-                    if identities is None:
-                        self.user_idents[discord_user_id] = [fetched_identity]
-                    else:
-                        self.user_idents[discord_user_id].append(fetched_identity)
-                except KeyError as e:
-                    logger.warning(f"Malformed resource with ID: {str(r.id)}")
-                    continue
-                except Exception as e:
-                    logger.error(e)
+                self.set_user_idents_from_resource(resource=r)
         except Exception as e:
             raise Exception(e)
 
     def load_bugout_configs(self) -> None:
         try:
             response = bc.list_resources(
-                token=MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
+                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
                 params={
                     "application_id": MOONSTREAM_APPLICATION_ID,
                     "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
@@ -200,16 +272,7 @@ class LeaderboardDiscordBot(commands.Bot):
             )
 
             for r in response.resources:
-                try:
-                    discord_server_id = r.resource_data["discord_server_id"]
-                    self.server_configs[discord_server_id] = data.ResourceConfig(
-                        id=r.id, resource_data=data.Config(**r.resource_data)
-                    )
-                except KeyError:
-                    logger.warning(f"Malformed resource with ID: {str(r.id)}")
-                    continue
-                except Exception as e:
-                    logger.error(e)
+                self.set_server_configs_from_resource(resource=r)
         except Exception as e:
             raise Exception(e)
 
@@ -220,7 +283,9 @@ class LeaderboardDiscordBot(commands.Bot):
             url = f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(leaderboard.leaderboard_id)}"
             response = await actions.caller(url=url, semaphore=semaphore)
             if response is not None:
-                leaderboard.leaderboard_info = data.LeaderboardInfo(**response)
+                self.set_server_configs_leaderboards(
+                    leaderboard=leaderboard, leaderboard_info=response
+                )
 
         all_leaderboards: List[data.ConfigLeaderboard] = []
         for g_id in self.server_configs:
@@ -243,13 +308,9 @@ class PingCog(commands.Cog):
             name="ping", description=f"Ping pong with {LEADERBOARD_DISCORD_BOT_NAME}"
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
-
-    def prepare_embed(self) -> discord.Embed:
-        return discord.Embed(
-            description=f"Bot **{LEADERBOARD_DISCORD_BOT_NAME}** ping latency is **{round(self.bot.latency * 1000)}ms**",
-        )
 
     # https://discordpy.readthedocs.io/en/stable/interactions/api.html?highlight=app_commands%20command#discord.app_commands.command
     # @app_commands.command(
@@ -265,4 +326,16 @@ class PingCog(commands.Cog):
                 interaction.channel,
             )
         )
-        await interaction.response.send_message(embed=self.prepare_embed())
+        description = f"""**Pong**
+- Bot name: {LEADERBOARD_DISCORD_BOT_NAME}
+- Version: {VERSION}
+- Latency: {round(self.bot.latency * 1000)}ms
+
+**Support Discord**: {MOONSTREAM_DISCORD_LINK}
+"""
+        embed = discord.Embed(
+            description=description,
+        )
+        embed.set_thumbnail(url=MOONSTREAM_THUMBNAIL_LOGO_URL)
+
+        await interaction.response.send_message(embed=embed)

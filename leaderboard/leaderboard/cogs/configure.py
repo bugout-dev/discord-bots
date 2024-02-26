@@ -166,6 +166,7 @@ class ConfigureCog(commands.Cog):
             description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot",
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 

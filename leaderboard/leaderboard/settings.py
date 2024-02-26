@@ -28,6 +28,8 @@ bugout_client = Bugout(brood_api_url=BUGOUT_BROOD_URL, spire_api_url=BUGOUT_SPIR
 
 LEADERBOARD_DISCORD_BOT_NAME = "leaderboard"
 MOONSTREAM_URL = "https://moonstream.to"
+MOONSTREAM_DISCORD_LINK = "https://discord.gg/fqHyPppNEa"
+MOONSTREAM_THUMBNAIL_LOGO_URL = "https://s3.amazonaws.com/static.simiotics.com/moonstream/assets/discord-transparent.png"
 
 MOONSTREAM_ENGINE_API_URL = os.environ.get(
     "MOONSTREAM_ENGINE_API_URL", "https://engineapi.moonstream.to"
@@ -43,7 +45,7 @@ class COLORS:
 
 LEADERBOARD_DISCORD_BOT_TOKEN = os.environ.get("LEADERBOARD_DISCORD_BOT_TOKEN", "")
 
-MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN = os.environ.get(
-    "MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN", ""
+MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN = os.environ.get(
+    "MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN", ""
 )
 MOONSTREAM_APPLICATION_ID = os.environ.get("MOONSTREAM_APPLICATION_ID", "")

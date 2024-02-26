@@ -21,6 +21,7 @@ class LeaderboardsCog(commands.Cog):
             description="List of leaderboards linked to Discord server",
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 
