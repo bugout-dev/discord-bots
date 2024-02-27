@@ -20,11 +20,9 @@ def discord_run_handler(args: argparse.Namespace) -> None:
     intents = configure_intents()
     bot = LeaderboardDiscordBot(command_prefix=commands.when_mentioned, intents=intents)
 
-    bot.bugout_connection = not args.no_bugout
-    if bot.bugout_connection is True:
-        bot.load_bugout_configs()
-        asyncio.run(bot.load_leaderboards_info())
-        bot.load_bugout_users()
+    bot.load_bugout_configs()
+    asyncio.run(bot.load_leaderboards_info())
+    bot.load_bugout_users()
 
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)
 
@@ -58,17 +56,6 @@ def main() -> None:
     )
     parser_discord_run = subparsers_discord.add_parser(
         "run", description="Run discord bot"
-    )
-    parser_discord_run.add_argument(
-        "-c",
-        "--config",
-        type=str,
-        help="Path to configuration file",
-    )
-    parser_discord_run.add_argument(
-        "--no-bugout",
-        action="store_true",
-        help="Specify to run bot without connection to Bugout application",
     )
     parser_discord_run.set_defaults(func=discord_run_handler)
 

@@ -43,32 +43,21 @@ class LeaderboardDiscordBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._bugout_connection: bool
+        self.bugout_connection_init()
 
         self._server_configs: Dict[int, data.ResourceConfig] = {}
         self._user_idents: Dict[int, List[data.UserIdentity]] = {}
 
-    @property
-    def bugout_connection(self):
-        return self._bugout_connection
-
-    @bugout_connection.setter
-    def bugout_connection(self, connection: bool):
-        self._bugout_connection = False
-        if connection is False:
-            return
-
+    def bugout_connection_init(self):
         if MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN == "":
-            logger.warning(
+            raise Exception(
                 f"MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN environment variable is not set, configuration fetch unavailable"
             )
-            return
 
         if MOONSTREAM_APPLICATION_ID == "":
-            logger.warning(
+            raise Exception(
                 f"MOONSTREAM_APPLICATION_ID environment variable is not set, configuration fetch unavailable"
             )
-            return
 
         try:
             bugout_application = bc.get_application(
@@ -78,11 +67,10 @@ class LeaderboardDiscordBot(commands.Bot):
             logger.info(
                 f"Connected to Bugout application {bugout_application.name} with ID {bugout_application.id}"
             )
-        except Exception:
-            logger.warning("Unable to establish connection with Bugout application")
-            return
-
-        self._bugout_connection = True
+        except Exception as e:
+            raise Exception(
+                f"Unable to establish connection with Bugout application, err: {e}"
+            )
 
     @property
     def server_configs(self):

@@ -250,7 +250,9 @@ async def push_user_identity(
 
     if response is not None:
         resource = BugoutResource(**response)
-        logger.info(f"Saved user identity as resource with ID: {resource.id}")
+        logger.info(
+            f"Saved user {discord_user_id} identity as resource with ID: {resource.id}"
+        )
 
     return resource
 
@@ -271,6 +273,44 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
         )
 
     return removed_resource_id
+
+
+async def create_or_update_server_config(
+    discord_server_id: int,
+    leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
+    roles: Optional[List[data.ConfigRole]] = None,
+    resource_id: Optional[uuid.UUID] = None,
+) -> Optional[BugoutResource]:
+    """
+    Creates new resource if no server configuration presented in Brood resources.
+    """
+    resource: Optional[BugoutResource] = None
+
+    if resource_id is None:
+        resource = await create_server_config(
+            discord_server_id=discord_server_id,
+            leaderboards=leaderboards,
+            roles=roles,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to create resource for new Discord server with ID: {discord_server_id}"
+            )
+            # del self.bot.server_configs[guild_id]
+            return None
+    else:
+        resource = await update_server_config(
+            resource_id=resource_id,
+            leaderboards=leaderboards,
+            roles=roles,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to update resource with ID: {str(resource_id)} for discord server with ID: {discord_server_id}"
+            )
+            return None
+
+    return resource
 
 
 async def create_server_config(
@@ -303,6 +343,9 @@ async def create_server_config(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(
+            f"Created server config as resource with ID: {resource.id} for guild  {discord_server_id}"
+        )
 
     return resource
 
@@ -334,6 +377,7 @@ async def update_server_config(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(f"Updated server config at resource with ID: {resource.id}")
 
     return resource
 

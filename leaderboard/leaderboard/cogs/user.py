@@ -102,27 +102,21 @@ class UserCog(commands.Cog):
         discord_user_id: int,
         new_ident: data.UserIdentity,
     ) -> None:
-        if self.bot.bugout_connection is False:
-            new_ident.resource_id = uuid.uuid4()
-            logger.warning(
-                "Working with temporary user_idents without connection to Bugout resources"
+        resource = await actions.push_user_identity(
+            discord_user_id=discord_user_id,
+            identifier=new_ident.identifier,
+            name=new_ident.name,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to save resource for user with Discord ID: {str(discord_user_id)} and identifier: {new_ident.identifier}"
             )
-        else:
-            resource = await actions.push_user_identity(
-                discord_user_id=discord_user_id,
-                identifier=new_ident.identifier,
-                name=new_ident.name,
+            await interaction.followup.send(
+                embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
             )
-            if resource is None:
-                logger.error(
-                    f"Unable to save resource for user with Discord ID: {str(discord_user_id)} and identifier: {new_ident.identifier}"
-                )
-                await interaction.followup.send(
-                    embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
-                )
-                return
+            return
 
-            new_ident.resource_id = resource.id
+        new_ident.resource_id = resource.id
 
         if self.bot.user_idents.get(discord_user_id) is None:
             self.bot.user_idents[discord_user_id] = [new_ident]
@@ -158,24 +152,19 @@ class UserCog(commands.Cog):
         ident_to_remove: data.UserIdentity,
         updated_identities: List[data.UserIdentity],
     ) -> None:
-        if self.bot.bugout_connection is False:
-            logger.warning(
-                "Working with temporary user_idents without connection to Bugout resources"
+        removed_resource_id: Optional[uuid.UUID] = None
+        if ident_to_remove.resource_id is not None:
+            removed_resource_id = await actions.remove_user_identity(
+                resource_id=ident_to_remove.resource_id
             )
-        else:
-            removed_resource_id: Optional[uuid.UUID] = None
-            if ident_to_remove.resource_id is not None:
-                removed_resource_id = await actions.remove_user_identity(
-                    resource_id=ident_to_remove.resource_id
-                )
-            if removed_resource_id is None:
-                logger.error(
-                    f"Unable to delete resource with ID: {str(ident_to_remove.resource_id)}"
-                )
-                await interaction.followup.send(
-                    embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
-                )
-                return
+        if removed_resource_id is None:
+            logger.error(
+                f"Unable to delete resource with ID: {str(ident_to_remove.resource_id)}"
+            )
+            await interaction.followup.send(
+                embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
+            )
+            return
 
         self.bot.user_idents[discord_user_id] = updated_identities
 
@@ -255,8 +244,9 @@ class UserCog(commands.Cog):
         if ident_to_remove is None:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    description=f"Identity: **{str(user_view.remove_ident_input)}** not found in user list"
+                    description=f"Identity: **{str(user_view.remove_ident_input)}** not found in user list",
                 ),
+                ephemeral=True,
             )
             return
 

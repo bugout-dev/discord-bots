@@ -1,5 +1,6 @@
 import logging
 import os
+from distutils.util import strtobool
 
 from bugout.app import Bugout
 
@@ -10,13 +11,21 @@ BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER = (
     "discord-bot-leaderboard-user-identity"
 )
 
-LOG_LEVEL_RAW = os.environ.get("LOG_LEVEL")
-LOG_LEVEL = 20  # logging.INFO
+LEADERBOARD_DISCORD_BOT_DEBUG_RAW = os.getenv("LEADERBOARD_DISCORD_BOT_DEBUG")
+LEADERBOARD_DISCORD_BOT_DEBUG = False
 try:
-    if LOG_LEVEL_RAW is not None:
-        LOG_LEVEL = int(LOG_LEVEL_RAW)
+    if LEADERBOARD_DISCORD_BOT_DEBUG_RAW is not None:
+        LEADERBOARD_DISCORD_BOT_DEBUG = bool(
+            strtobool(LEADERBOARD_DISCORD_BOT_DEBUG_RAW)
+        )
 except:
-    raise Exception(f"Could not parse LOG_LEVEL as int: {LOG_LEVEL_RAW}")
+    raise Exception(
+        f"Could not parse LEADERBOARD_DISCORD_BOT_DEBUG {LEADERBOARD_DISCORD_BOT_DEBUG_RAW} as bool"
+    )
+
+LOG_LEVEL = 20  # logging.INFO
+if LEADERBOARD_DISCORD_BOT_DEBUG is True:
+    LOG_LEVEL = 10
 
 
 # Bugout
