@@ -97,40 +97,104 @@ class UserCog(commands.Cog):
         return self._slash_command_data
 
     async def background_process_add_user_identity(
-        self, discord_user_id: int, new_ident: data.UserIdentity
+        self,
+        interaction: discord.Interaction,
+        discord_user_id: int,
+        new_ident: data.UserIdentity,
     ) -> None:
-        resource = await actions.push_user_identity(
-            discord_user_id=discord_user_id,
-            identifier=new_ident.identifier,
-            name=new_ident.name,
-        )
-        if resource is None:
-            logger.error(
-                f"Unable to save resource for user with Discord ID: {str(discord_user_id)} and identifier: {new_ident.identifier}"
+        if self.bot.bugout_connection is False:
+            new_ident.resource_id = uuid.uuid4()
+            logger.warning(
+                "Working with temporary user_idents without connection to Bugout resources"
             )
-            return
+        else:
+            resource = await actions.push_user_identity(
+                discord_user_id=discord_user_id,
+                identifier=new_ident.identifier,
+                name=new_ident.name,
+            )
+            if resource is None:
+                logger.error(
+                    f"Unable to save resource for user with Discord ID: {str(discord_user_id)} and identifier: {new_ident.identifier}"
+                )
+                await interaction.followup.send(
+                    embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
+                )
+                return
 
-        new_ident.resource_id = resource.id
+            new_ident.resource_id = resource.id
+
         if self.bot.user_idents.get(discord_user_id) is None:
             self.bot.user_idents[discord_user_id] = [new_ident]
         else:
             self.bot.user_idents[discord_user_id].append(new_ident)
 
-        logger.info(f"Saved user identity as resource with ID: {resource.id}")
-
-    async def background_process_remove_user_identity(
-        self, resource_id: uuid.UUID
-    ) -> None:
-        removed_resource_id = await actions.remove_user_identity(
-            resource_id=resource_id
+        await interaction.followup.send(
+            embed=actions.prepare_dynamic_embed(
+                title="New identity linked to Discord account",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Identity",
+                        "field_value": str(new_ident.identifier),
+                    },
+                    {
+                        "field_name": "Name",
+                        "field_value": str(new_ident.name),
+                    },
+                ],
+            ),
+            ephemeral=True,
         )
 
-        if removed_resource_id is None:
-            logger.error(f"Unable to delete resource with ID: {str(resource_id)}")
-            return
+        logger.info(
+            f"Added new identity: {new_ident.identifier} to user with ID: {discord_user_id}"
+        )
+
+    async def background_process_remove_user_identity(
+        self,
+        interaction: discord.Interaction,
+        discord_user_id: int,
+        ident_to_remove: data.UserIdentity,
+        updated_identities: List[data.UserIdentity],
+    ) -> None:
+        if self.bot.bugout_connection is False:
+            logger.warning(
+                "Working with temporary user_idents without connection to Bugout resources"
+            )
+        else:
+            removed_resource_id: Optional[uuid.UUID] = None
+            if ident_to_remove.resource_id is not None:
+                removed_resource_id = await actions.remove_user_identity(
+                    resource_id=ident_to_remove.resource_id
+                )
+            if removed_resource_id is None:
+                logger.error(
+                    f"Unable to delete resource with ID: {str(ident_to_remove.resource_id)}"
+                )
+                await interaction.followup.send(
+                    embed=discord.Embed(description=data.MESSAGE_INTERNAL_SERVER_ERROR)
+                )
+                return
+
+        self.bot.user_idents[discord_user_id] = updated_identities
+
+        await interaction.followup.send(
+            embed=actions.prepare_dynamic_embed(
+                title="Unlinked identity from Discord account",
+                description="",
+                fields=[
+                    {
+                        "field_name": "Identity",
+                        "field_value": str(ident_to_remove.name),
+                    }
+                ],
+            ),
+            ephemeral=True,
+        )
 
         logger.info(
-            f"Removed user identity represented as resource with ID: {str(removed_resource_id)}"
+            f"Removed identity: {ident_to_remove.identifier} from user with ID: {discord_user_id}"
         )
 
     async def handle_add_user_identity(
@@ -140,9 +204,7 @@ class UserCog(commands.Cog):
         discord_user_id: int,
         user_identities: List[data.UserIdentity],
     ) -> None:
-        if str(user_view.ident_input).lower() in [
-            i.identifier.lower() for i in user_identities
-        ]:
+        if str(user_view.ident_input) in [i.identifier for i in user_identities]:
             await interaction.followup.send(
                 embed=discord.Embed(
                     description="Identity already attached to your profile"
@@ -157,32 +219,15 @@ class UserCog(commands.Cog):
             name=str(user_view.name_input),
         )
 
-        await interaction.followup.send(
-            embed=actions.prepare_dynamic_embed(
-                title="New identity linked to Discord account",
-                description="",
-                fields=[
-                    {
-                        "field_name": "Identity",
-                        "field_value": str(user_view.ident_input),
-                    },
-                    {
-                        "field_name": "Name",
-                        "field_value": str(user_view.name_input),
-                    },
-                ],
-            ),
-            ephemeral=True,
-        )
-
         self.bot.loop.create_task(
             self.background_process_add_user_identity(
+                interaction=interaction,
                 discord_user_id=discord_user_id,
                 new_ident=new_ident,
             )
         )
 
-    async def remove_user_identity(
+    async def handle_remove_user_identity(
         self,
         user_view: UserView,
         interaction: discord.Interaction,
@@ -198,16 +243,16 @@ class UserCog(commands.Cog):
             )
             return
 
-        resource_id_to_remove: Optional[uuid.UUID] = None
+        ident_to_remove: Optional[data.UserIdentity] = None
         updated_identities: List[data.UserIdentity] = []
         for i in user_identities:
-            if str(user_view.remove_ident_input).lower() == i.identifier.lower():
-                resource_id_to_remove = i.resource_id
+            if str(user_view.remove_ident_input) == i.identifier:
+                ident_to_remove = i
                 continue
 
             updated_identities.append(i)
 
-        if resource_id_to_remove is None:
+        if ident_to_remove is None:
             await interaction.followup.send(
                 embed=discord.Embed(
                     description=f"Identity: **{str(user_view.remove_ident_input)}** not found in user list"
@@ -215,29 +260,12 @@ class UserCog(commands.Cog):
             )
             return
 
-        self.bot.user_idents[discord_user_id] = updated_identities
-
-        logger.info(
-            f"Removed identity: {str(user_view.remove_ident_input)} from user list"
-        )
-
-        await interaction.followup.send(
-            embed=actions.prepare_dynamic_embed(
-                title="Unlinked identity from Discord account",
-                description="",
-                fields=[
-                    {
-                        "field_name": "Identity",
-                        "field_value": str(user_view.remove_ident_input),
-                    }
-                ],
-            ),
-            ephemeral=True,
-        )
-
         self.bot.loop.create_task(
             self.background_process_remove_user_identity(
-                resource_id=resource_id_to_remove,
+                interaction=interaction,
+                discord_user_id=discord_user_id,
+                ident_to_remove=ident_to_remove,
+                updated_identities=updated_identities,
             )
         )
 
@@ -257,6 +285,7 @@ class UserCog(commands.Cog):
         user_identities: List[data.UserIdentity] = self.bot.user_idents.get(
             discord_user_id, []
         )
+        # TODO(kompotkot): Pagination
         identity_fields = [
             [
                 {
@@ -304,7 +333,7 @@ class UserCog(commands.Cog):
             return
 
         if user_view.remove_ident_input is not None:
-            await self.remove_user_identity(
+            await self.handle_remove_user_identity(
                 user_view=user_view,
                 interaction=interaction,
                 discord_user_id=discord_user_id,

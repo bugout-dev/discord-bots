@@ -10,6 +10,7 @@ MESSAGE_POSITION_NOT_FOUND = "Position not found"
 MESSAGE_CHANNEL_NOT_FOUND = "Discord channel not found"
 MESSAGE_GUILD_NOT_FOUND = "Discord guild not found"
 MESSAGE_ACCESS_DENIED = "Access denied"
+MESSAGE_INTERNAL_SERVER_ERROR = "Internal server error, please try later"
 
 
 class RequestMethods(Enum):

@@ -250,6 +250,7 @@ async def push_user_identity(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(f"Saved user identity as resource with ID: {resource.id}")
 
     return resource
 
@@ -265,6 +266,9 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
 
     if response is not None:
         removed_resource_id = uuid.UUID(response["id"])
+        logger.info(
+            f"Removed user identity represented as resource with ID: {str(removed_resource_id)}"
+        )
 
     return removed_resource_id
 
