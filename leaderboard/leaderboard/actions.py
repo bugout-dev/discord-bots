@@ -109,8 +109,6 @@ def auth_middleware(
     - user is guild owner
     - there are no auth roles in configuration yet
     - user has role specified in configuration
-
-    TODO(kompotkot): Use discord @command.has_role modified to work with server configuration
     """
     if guild_owner_id is not None:
         if user_id == guild_owner_id:

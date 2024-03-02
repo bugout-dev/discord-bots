@@ -40,6 +40,10 @@ MOONSTREAM_URL = "https://moonstream.to"
 MOONSTREAM_DISCORD_LINK = "https://discord.gg/fqHyPppNEa"
 MOONSTREAM_THUMBNAIL_LOGO_URL = "https://s3.amazonaws.com/static.simiotics.com/moonstream/assets/discord-transparent.png"
 
+LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS = os.environ.get(
+    "LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS", "Moonstream.to"
+)
+
 MOONSTREAM_ENGINE_API_URL = os.environ.get(
     "MOONSTREAM_ENGINE_API_URL", "https://engineapi.moonstream.to"
 )

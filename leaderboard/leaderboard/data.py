@@ -10,7 +10,9 @@ MESSAGE_POSITION_NOT_FOUND = "Position not found"
 MESSAGE_CHANNEL_NOT_FOUND = "Discord channel not found"
 MESSAGE_GUILD_NOT_FOUND = "Discord guild not found"
 MESSAGE_ACCESS_DENIED = "Access denied"
-MESSAGE_INTERNAL_SERVER_ERROR = "Internal server error, please try later"
+MESSAGE_INTERNAL_SERVER_ERROR = (
+    "Internal server error, please try again later or talk to administrator"
+)
 
 
 class RequestMethods(Enum):
@@ -82,6 +84,7 @@ class Config(BaseModel):
     discord_auth_roles: List[ConfigRole] = Field(default_factory=list)
     leaderboards: List[ConfigLeaderboard] = Field(default_factory=list)
     commands: List[ConfigCommands] = Field(default_factory=list)
+    thumbnail_url: Optional[str] = None
 
 
 class ResourceConfig(BaseModel):

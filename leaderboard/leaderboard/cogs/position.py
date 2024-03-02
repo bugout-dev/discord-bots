@@ -247,11 +247,16 @@ class PositionCog(commands.Cog):
             )
             return
 
+        embed = self.prepare_embed(
+            l_info=l_info,
+            l_score=l_score,
+        )
+
+        if server_config.resource_data.thumbnail_url is not None:
+            embed.set_thumbnail(url=server_config.resource_data.thumbnail_url)
+
         await interaction.followup.send(
-            embed=self.prepare_embed(
-                l_info=l_info,
-                l_score=l_score,
-            )
+            embed=embed,
         )
 
     # @slash_command_handler.autocomplete("identity")

@@ -20,9 +20,7 @@ def discord_run_handler(args: argparse.Namespace) -> None:
     intents = configure_intents()
     bot = LeaderboardDiscordBot(command_prefix=commands.when_mentioned, intents=intents)
 
-    bot.load_bugout_configs()
-    asyncio.run(bot.load_leaderboards_info())
-    bot.load_bugout_users()
+    asyncio.run(bot.load_configs())
 
     bot.run(token=LEADERBOARD_DISCORD_BOT_TOKEN)
 

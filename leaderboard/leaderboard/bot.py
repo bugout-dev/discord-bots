@@ -3,7 +3,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Set
 
 import discord
-from bugout.data import BugoutResource
+from bugout.data import BugoutResource, BugoutResources
 from discord import app_commands
 from discord.ext import commands
 from discord.guild import Guild
@@ -16,9 +16,11 @@ from .cogs.leaderboards import LeaderboardsCog
 from .cogs.position import PositionCog
 from .cogs.user import UserCog
 from .settings import (
+    BUGOUT_BROOD_URL,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
     COLORS,
+    LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS,
     LEADERBOARD_DISCORD_BOT_NAME,
     MOONSTREAM_APPLICATION_ID,
     MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
@@ -87,7 +89,7 @@ class LeaderboardDiscordBot(commands.Bot):
         except Exception as e:
             logger.error(e)
 
-    def set_server_configs_leaderboards(
+    def set_server_configs_leaderboard_info(
         self, leaderboard: data.ConfigLeaderboard, leaderboard_info: Any
     ):
         try:
@@ -121,6 +123,12 @@ class LeaderboardDiscordBot(commands.Bot):
         logger.info(
             f"Logged in {COLORS.BLUE}{str(len(self.guilds))}{COLORS.RESET} guilds on as {COLORS.BLUE}{self.user} - {self.user.id}{COLORS.RESET}"
         )
+
+        activity = discord.Activity(
+            name=LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS,
+            type=discord.ActivityType.playing,
+        )
+        await self.change_presence(activity=activity)
 
         for guild in self.guilds:
             await self.tree.sync(guild=discord.Object(id=guild.id))
@@ -176,7 +184,7 @@ class LeaderboardDiscordBot(commands.Bot):
                     for command in guild_config.resource_data.commands:
                         if command.origin == cog.slash_command_name:
                             # Generate unique slash command based on server configuration and register it
-                            self.add_command_to_tree(
+                            await self.add_command_to_tree(
                                 name=command.renamed, cog=cog, guild=guild
                             )
                             is_command_for_guild_registered = True
@@ -185,14 +193,14 @@ class LeaderboardDiscordBot(commands.Bot):
                             )
                 if is_command_for_guild_registered is False:
                     # Register common command in guild
-                    self.add_command_to_tree(
+                    await self.add_command_to_tree(
                         name=cog.slash_command_name, cog=cog, guild=guild
                     )
                     logger.debug(
                         f"Registered command {cog.slash_command_name} at {guild.name}"
                     )
 
-    def add_command_to_tree(self, name: str, cog, guild: Optional[Guild] = None):
+    async def add_command_to_tree(self, name: str, cog, guild: Optional[Guild] = None):
         """
         Add application command to the command tree.
         """
@@ -228,50 +236,51 @@ class LeaderboardDiscordBot(commands.Bot):
 
         await self.process_commands(message)
 
-    def load_bugout_users(self) -> None:
-        try:
-            response = bc.list_resources(
-                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
-                params={
-                    "application_id": MOONSTREAM_APPLICATION_ID,
-                    "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
-                },
+    async def load_bugout_configs(self, semaphore: asyncio.Semaphore) -> int:
+        url = f"{BUGOUT_BROOD_URL}/resources/?application_id={MOONSTREAM_APPLICATION_ID}&type={BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG}"
+        response = await actions.caller(url=url, semaphore=semaphore, is_auth=True)
+
+        if response is None:
+            logger.warning("Unable to fetch configurations from Bugout resources")
+            return 0
+
+        resources = BugoutResources(**response)
+        num_of_configs = len(resources.resources)
+        logger.info(f"Fetched {num_of_configs} Discord server configurations")
+
+        if num_of_configs == 0:
+            return num_of_configs
+
+        for r in resources.resources:
+            self.set_server_configs_from_resource(resource=r)
+
+        return num_of_configs
+
+    async def load_bugout_users_tasks(
+        self, semaphore: asyncio.Semaphore
+    ) -> List[asyncio.Task]:
+        async def load_bugout_users() -> None:
+            response = await actions.caller(
+                url=f"{BUGOUT_BROOD_URL}/resources/?application_id={MOONSTREAM_APPLICATION_ID}&type={BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER}",
+                semaphore=semaphore,
+                is_auth=True,
             )
+            if response is not None:
+                resources = BugoutResources(**response)
+                logger.info(f"Fetched identities of {len(resources.resources)} users")
+                for r in resources.resources:
+                    self.set_user_idents_from_resource(resource=r)
 
-            logger.info(f"Fetched identities of {len(response.resources)} users")
+        return [asyncio.create_task(load_bugout_users())]
 
-            for r in response.resources:
-                self.set_user_idents_from_resource(resource=r)
-        except Exception as e:
-            raise Exception(e)
-
-    def load_bugout_configs(self) -> None:
-        try:
-            response = bc.list_resources(
-                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
-                params={
-                    "application_id": MOONSTREAM_APPLICATION_ID,
-                    "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
-                },
-            )
-
-            logger.info(
-                f"Fetched {len(response.resources)} Discord server configurations"
-            )
-
-            for r in response.resources:
-                self.set_server_configs_from_resource(resource=r)
-        except Exception as e:
-            raise Exception(e)
-
-    async def load_leaderboards_info(self) -> None:
-        semaphore = asyncio.Semaphore(4)
-
+    async def load_leaderboards_info_tasks(
+        self, semaphore: asyncio.Semaphore
+    ) -> List[asyncio.Task]:
         async def load_leaderboard_info(leaderboard: data.ConfigLeaderboard) -> None:
             url = f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/info?leaderboard_id={str(leaderboard.leaderboard_id)}"
             response = await actions.caller(url=url, semaphore=semaphore)
             if response is not None:
-                self.set_server_configs_leaderboards(
+                self.set_server_configs_leaderboard_info(
                     leaderboard=leaderboard, leaderboard_info=response
                 )
 
@@ -285,7 +294,18 @@ class LeaderboardDiscordBot(commands.Bot):
             task = asyncio.create_task(load_leaderboard_info(leaderboard=l))
             tasks.append(task)
 
-        await asyncio.gather(*tasks)
+        return tasks
+
+    async def load_configs(self):
+        # TODO(kompotkot): Add pagination for resources
+        num_of_configs = await self.load_bugout_configs(semaphore=asyncio.Semaphore(1))
+        logger.info(f"Loaded {num_of_configs} configurations")
+
+        semaphore = asyncio.Semaphore(4)
+        l_info_tasks = await self.load_leaderboards_info_tasks(semaphore=semaphore)
+        u_tasks = await self.load_bugout_users_tasks(semaphore=semaphore)
+
+        await asyncio.gather(*[*l_info_tasks, *u_tasks])
 
 
 class PingCog(commands.Cog):

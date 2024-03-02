@@ -4,7 +4,6 @@ import uuid
 from typing import Any, Dict, List, Optional, Sequence
 
 import discord
-from bugout.data import BugoutResource
 from discord import app_commands
 from discord.ext import commands
 from discord.member import Member
