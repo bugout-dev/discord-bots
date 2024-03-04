@@ -51,8 +51,8 @@ echo -e "${PREFIX_INFO} Retrieving deployment parameters"
 LEADERBOARD_DISCORD_BOT_TOKEN=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name LEADERBOARD_DISCORD_BOT_TOKEN)
 echo "LEADERBOARD_DISCORD_BOT_TOKEN=${LEADERBOARD_DISCORD_BOT_TOKEN}" >> "${PARAMETERS_ENV_PATH}"
 
-MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --with-decryption --name MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN)
-echo "MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN=${MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}" >> "${PARAMETERS_ENV_PATH}"
+MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --with-decryption --name MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN)
+echo "MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN=${MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN}" >> "${PARAMETERS_ENV_PATH}"
 
 MOONSTREAM_APPLICATION_ID=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name MOONSTREAM_APPLICATION_ID)
 echo "MOONSTREAM_APPLICATION_ID=${MOONSTREAM_APPLICATION_ID}" >> "${PARAMETERS_ENV_PATH}"

@@ -11,16 +11,17 @@ from ..settings import LEADERBOARD_DISCORD_BOT_NAME, MOONSTREAM_URL
 logger = logging.getLogger(__name__)
 
 
-class LeaderboardCog(commands.Cog):
+class RankingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
         self._slash_command_data = data.SlashCommandData(
-            name="leaderboard",
-            description="Leaderboard for on-chain activities",
+            name="ranking",
+            description="Check top 10 on leaderboard",
             autocomplete_value="id",
         )
 
+    @property
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 
@@ -52,9 +53,11 @@ class LeaderboardCog(commands.Cog):
         if l_info is not None:
             embed.url = f"{MOONSTREAM_URL}/leaderboards/?leaderboard_id={l_info.id}"
 
+        embed.set_footer(text="Powered by Moonstream")
+
         return embed
 
-    async def background_process_leaderboard(
+    async def background_process_ranking(
         self,
         user: Any,
         channel: Any,
@@ -88,13 +91,13 @@ class LeaderboardCog(commands.Cog):
             )
 
     # @app_commands.command(
-    #     name="leaderboard",
+    #     name="ranking",
     #     description="Leaderboard for on-chain activities",
     # )
     async def slash_command_handler(self, interaction: discord.Interaction, id: str):
         logger.info(
             actions.prepare_log_message(
-                "/leaderboard",
+                "/ranking",
                 "SLASH COMMAND",
                 interaction.user,
                 interaction.guild,
@@ -107,12 +110,12 @@ class LeaderboardCog(commands.Cog):
         )
 
         self.bot.loop.create_task(
-            self.background_process_leaderboard(
+            self.background_process_ranking(
                 user=interaction.user, channel=interaction.channel, l_id=id
             )
         )
 
-    # @leaderboard.autocomplete("id")
+    # @ranking.autocomplete("id")
     async def slash_command_autocompletion(
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice[str]]:

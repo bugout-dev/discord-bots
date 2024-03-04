@@ -21,8 +21,8 @@ from .settings import (
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER,
     COLORS,
     MOONSTREAM_APPLICATION_ID,
+    MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     MOONSTREAM_ENGINE_API_URL,
-    MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,8 +109,6 @@ def auth_middleware(
     - user is guild owner
     - there are no auth roles in configuration yet
     - user has role specified in configuration
-
-    TODO(kompotkot): Use discord @command.has_role modified to work with server configuration
     """
     if guild_owner_id is not None:
         if user_id == guild_owner_id:
@@ -150,7 +148,7 @@ async def caller(
                 if is_auth is True:
                     request_kwargs["headers"][
                         "Authorization"
-                    ] = f"Bearer {MOONSTREAN_DISCORD_BOT_ACCESS_TOKEN}"
+                    ] = f"Bearer {MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN}"
                 async with request_method(url, **request_kwargs) as response:
                     response.raise_for_status()
                     json_response = await response.json()
@@ -203,8 +201,8 @@ async def process_leaderboard_info_with_scores(
     return l_info, l_scores
 
 
-async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
-    l_position: Optional[data.Score] = None
+async def get_score(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
+    l_score: Optional[data.Score] = None
     response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
         semaphore=asyncio.Semaphore(1),
@@ -212,18 +210,18 @@ async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
     if response is not None:
         l_scores = [data.Score(**s) for s in response]
         if len(l_scores) == 1:
-            l_position = l_scores[0]
-    return l_position
+            l_score = l_scores[0]
+    return l_score
 
 
-async def process_leaderboard_info_with_position(
+async def process_leaderboard_info_with_score(
     l_id: uuid.UUID, address: str
 ) -> Tuple[Optional[data.LeaderboardInfo], Optional[data.Score]]:
-    l_info, l_position = await asyncio.gather(
-        get_leaderboard_info(l_id), get_position(l_id, address)
+    l_info, l_score = await asyncio.gather(
+        get_leaderboard_info(l_id), get_score(l_id, address)
     )
 
-    return l_info, l_position
+    return l_info, l_score
 
 
 async def push_user_identity(
@@ -250,6 +248,9 @@ async def push_user_identity(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(
+            f"Saved user {discord_user_id} identity as resource with ID: {resource.id}"
+        )
 
     return resource
 
@@ -265,8 +266,49 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
 
     if response is not None:
         removed_resource_id = uuid.UUID(response["id"])
+        logger.info(
+            f"Removed user identity represented as resource with ID: {str(removed_resource_id)}"
+        )
 
     return removed_resource_id
+
+
+async def create_or_update_server_config(
+    discord_server_id: int,
+    leaderboards: Optional[List[data.ConfigLeaderboard]] = None,
+    roles: Optional[List[data.ConfigRole]] = None,
+    resource_id: Optional[uuid.UUID] = None,
+) -> Optional[BugoutResource]:
+    """
+    Creates new resource if no server configuration presented in Brood resources.
+    """
+    resource: Optional[BugoutResource] = None
+
+    if resource_id is None:
+        resource = await create_server_config(
+            discord_server_id=discord_server_id,
+            leaderboards=leaderboards,
+            roles=roles,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to create resource for new Discord server with ID: {discord_server_id}"
+            )
+            # del self.bot.server_configs[guild_id]
+            return None
+    else:
+        resource = await update_server_config(
+            resource_id=resource_id,
+            leaderboards=leaderboards,
+            roles=roles,
+        )
+        if resource is None:
+            logger.error(
+                f"Unable to update resource with ID: {str(resource_id)} for discord server with ID: {discord_server_id}"
+            )
+            return None
+
+    return resource
 
 
 async def create_server_config(
@@ -299,6 +341,9 @@ async def create_server_config(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(
+            f"Created server config as resource with ID: {resource.id} for guild  {discord_server_id}"
+        )
 
     return resource
 
@@ -330,6 +375,7 @@ async def update_server_config(
 
     if response is not None:
         resource = BugoutResource(**response)
+        logger.info(f"Updated server config at resource with ID: {resource.id}")
 
     return resource
 
