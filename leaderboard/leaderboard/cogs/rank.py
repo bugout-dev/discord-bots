@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .. import actions, data
+from ..settings import MOONSTREAM_LOGO_URL
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +52,13 @@ class LeaderboardSelectView(discord.ui.View):
         self.stop()
 
 
-class PositionCog(commands.Cog):
+class RankCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
         self._slash_command_data = data.SlashCommandData(
-            name="position",
-            description="Search for position in leaderboard",
+            name="rank",
+            description="Search for rank in leaderboard",
             autocomplete_value="identity",
         )
 
@@ -161,22 +162,24 @@ class PositionCog(commands.Cog):
         description += cap_line
 
         embed = discord.Embed(
-            title=f"Position{f' at {l_info.title}' if l_info is not None else ''}",
+            title=f"Rank{f' at {l_info.title}' if l_info is not None else ''}",
             description=description,
         )
         embed.add_field(name="Rank", value=l_score.rank)
         embed.add_field(name=address_name, value=l_score.address)
         embed.add_field(name="Score", value=score)
 
+        embed.set_footer(text="Powered by Moonstream", icon_url=MOONSTREAM_LOGO_URL)
+
         return embed
 
-    # @app_commands.command(name="position", description="Show user results")
+    # @app_commands.command(name="rank", description="Show user results")
     async def slash_command_handler(
         self, interaction: discord.Interaction, identity: str
     ):
         logger.info(
             actions.prepare_log_message(
-                "/position",
+                "/rank",
                 "SLASH COMMAND",
                 interaction.user,
                 interaction.guild,
@@ -237,12 +240,12 @@ class PositionCog(commands.Cog):
             )
             return
 
-        l_info, l_score = await actions.process_leaderboard_info_with_position(
+        l_info, l_score = await actions.process_leaderboard_info_with_score(
             l_id=leaderboard_id, address=identity
         )
         if l_score is None:
             await interaction.followup.send(
-                embed=discord.Embed(description=data.MESSAGE_POSITION_NOT_FOUND),
+                embed=discord.Embed(description=data.MESSAGE_RANK_NOT_FOUND),
                 ephemeral=True,
             )
             return

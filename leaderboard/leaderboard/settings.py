@@ -38,7 +38,7 @@ bugout_client = Bugout(brood_api_url=BUGOUT_BROOD_URL, spire_api_url=BUGOUT_SPIR
 LEADERBOARD_DISCORD_BOT_NAME = "leaderboard"
 MOONSTREAM_URL = "https://moonstream.to"
 MOONSTREAM_DISCORD_LINK = "https://discord.gg/fqHyPppNEa"
-MOONSTREAM_THUMBNAIL_LOGO_URL = "https://s3.amazonaws.com/static.simiotics.com/moonstream/assets/discord-transparent.png"
+MOONSTREAM_LOGO_URL = "https://s3.amazonaws.com/static.simiotics.com/moonstream/assets/discord-transparent.png"
 
 LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS = os.environ.get(
     "LEADERBOARD_DISCORD_BOT_ACTIVITY_STATUS", "Moonstream.to"

@@ -11,9 +11,9 @@ from discord.message import Message
 
 from . import actions, data
 from .cogs.configure import ConfigureCog
-from .cogs.leaderboard import LeaderboardCog
 from .cogs.leaderboards import LeaderboardsCog
-from .cogs.position import PositionCog
+from .cogs.rank import RankCog
+from .cogs.ranking import RankingCog
 from .cogs.user import UserCog
 from .settings import (
     BUGOUT_BROOD_URL,
@@ -26,7 +26,7 @@ from .settings import (
     MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     MOONSTREAM_DISCORD_LINK,
     MOONSTREAM_ENGINE_API_URL,
-    MOONSTREAM_THUMBNAIL_LOGO_URL,
+    MOONSTREAM_LOGO_URL,
 )
 from .settings import bugout_client as bc
 from .version import VERSION
@@ -142,10 +142,10 @@ class LeaderboardDiscordBot(commands.Bot):
         available_cogs_map: List[data.CogMap] = []
         for cog in [
             ConfigureCog(self),
-            LeaderboardCog(self),
+            RankingCog(self),
             LeaderboardsCog(self),
             PingCog(self),
-            PositionCog(self),
+            RankCog(self),
             UserCog(self),
         ]:
             cog_map = data.CogMap(
@@ -344,6 +344,6 @@ class PingCog(commands.Cog):
         embed = discord.Embed(
             description=description,
         )
-        embed.set_thumbnail(url=MOONSTREAM_THUMBNAIL_LOGO_URL)
+        embed.set_thumbnail(url=MOONSTREAM_LOGO_URL)
 
         await interaction.response.send_message(embed=embed)

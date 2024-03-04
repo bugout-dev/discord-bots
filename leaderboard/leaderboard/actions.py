@@ -201,8 +201,8 @@ async def process_leaderboard_info_with_scores(
     return l_info, l_scores
 
 
-async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
-    l_position: Optional[data.Score] = None
+async def get_score(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
+    l_score: Optional[data.Score] = None
     response = await caller(
         url=f"{MOONSTREAM_ENGINE_API_URL}/leaderboard/position?leaderboard_id={str(l_id)}&address={address}&normalize_addresses=False&window_size=0&limit=10&offset=0",
         semaphore=asyncio.Semaphore(1),
@@ -210,18 +210,18 @@ async def get_position(l_id: uuid.UUID, address: str) -> Optional[data.Score]:
     if response is not None:
         l_scores = [data.Score(**s) for s in response]
         if len(l_scores) == 1:
-            l_position = l_scores[0]
-    return l_position
+            l_score = l_scores[0]
+    return l_score
 
 
-async def process_leaderboard_info_with_position(
+async def process_leaderboard_info_with_score(
     l_id: uuid.UUID, address: str
 ) -> Tuple[Optional[data.LeaderboardInfo], Optional[data.Score]]:
-    l_info, l_position = await asyncio.gather(
-        get_leaderboard_info(l_id), get_position(l_id, address)
+    l_info, l_score = await asyncio.gather(
+        get_leaderboard_info(l_id), get_score(l_id, address)
     )
 
-    return l_info, l_position
+    return l_info, l_score
 
 
 async def push_user_identity(
