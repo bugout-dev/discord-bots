@@ -84,12 +84,13 @@ class UserView(discord.ui.View):
         self.stop()
 
 
-class UserCog(commands.Cog):
+class ProfileCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
         self._slash_command_data = data.SlashCommandData(
-            name="user", description="User settings"
+            name="profile",
+            description="Create and manage bot profile addresses and IDs",
         )
 
     @property
@@ -263,7 +264,7 @@ class UserCog(commands.Cog):
     async def slash_command_handler(self, interaction: discord.Interaction):
         logger.info(
             actions.prepare_log_message(
-                "/user",
+                "/profile",
                 "SLASH COMMAND",
                 interaction.user,
                 interaction.guild,

@@ -18,7 +18,7 @@ class LeaderboardsCog(commands.Cog):
 
         self._slash_command_data = data.SlashCommandData(
             name="leaderboards",
-            description="List of leaderboards linked to Discord server",
+            description="Check list of all leaderboards in the Discord server",
         )
 
     @property

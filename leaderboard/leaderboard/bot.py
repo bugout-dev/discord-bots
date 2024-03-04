@@ -14,7 +14,7 @@ from .cogs.configure import ConfigureCog
 from .cogs.leaderboards import LeaderboardsCog
 from .cogs.rank import RankCog
 from .cogs.ranking import RankingCog
-from .cogs.user import UserCog
+from .cogs.profile import ProfileCog
 from .settings import (
     BUGOUT_BROOD_URL,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
@@ -146,7 +146,7 @@ class LeaderboardDiscordBot(commands.Bot):
             LeaderboardsCog(self),
             PingCog(self),
             RankCog(self),
-            UserCog(self),
+            ProfileCog(self),
         ]:
             cog_map = data.CogMap(
                 cog=cog,

@@ -58,7 +58,7 @@ class RankCog(commands.Cog):
 
         self._slash_command_data = data.SlashCommandData(
             name="rank",
-            description="Search for rank in leaderboard",
+            description="Check current rank on a leaderboard",
             autocomplete_value="identity",
         )
 

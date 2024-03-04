@@ -163,7 +163,7 @@ class ConfigureCog(commands.Cog):
 
         self._slash_command_data = data.SlashCommandData(
             name="configure",
-            description=f"Configure {LEADERBOARD_DISCORD_BOT_NAME} bot",
+            description=f"Admin: Configure {LEADERBOARD_DISCORD_BOT_NAME} bot",
         )
 
     @property
