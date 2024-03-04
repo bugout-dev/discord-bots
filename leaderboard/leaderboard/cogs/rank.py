@@ -169,7 +169,7 @@ class RankCog(commands.Cog):
         embed.add_field(name=address_name, value=l_score.address)
         embed.add_field(name="Score", value=score)
 
-        embed.set_footer(text="Powered by Moonstream", icon_url=MOONSTREAM_LOGO_URL)
+        embed.set_footer(text="Powered by Moonstream")
 
         return embed
 

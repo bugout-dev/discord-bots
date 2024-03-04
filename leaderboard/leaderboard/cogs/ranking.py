@@ -52,6 +52,8 @@ class RankingCog(commands.Cog):
 
         if l_info is not None:
             embed.url = f"{MOONSTREAM_URL}/leaderboards/?leaderboard_id={l_info.id}"
+        
+        embed.set_footer(text="Powered by Moonstream")
 
         return embed
 
