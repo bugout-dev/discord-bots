@@ -43,6 +43,7 @@ class PaginationView(discord.ui.View):
         title: str,
         description: str,
         wrapped_fields: List[List[Any]],
+        ephemeral: bool = False,
         *args,
         **kwargs,
     ):
@@ -63,8 +64,10 @@ class PaginationView(discord.ui.View):
         elif fields_len % self.offset != 0:
             self.total_pages += 1
 
+        self.ephemeral = ephemeral
+
     async def send(self, interaction: discord.Interaction):
-        await interaction.response.send_message(view=self, ephemeral=True)
+        await interaction.response.send_message(view=self, ephemeral=self.ephemeral)
         self.message = await interaction.original_response()
         await self.update_view(self.wrapped_fields[: self.offset])
 

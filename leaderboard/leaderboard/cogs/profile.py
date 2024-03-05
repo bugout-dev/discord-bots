@@ -302,6 +302,7 @@ class ProfileCog(commands.Cog):
                 "" if len(user_identities) != 0 else "There are no linked identities"
             ),
             wrapped_fields=identity_fields,
+            ephemeral=True,
         )
 
         # Turn off Unpin the identification button if there are no identities attached to Discord user
