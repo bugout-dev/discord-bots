@@ -12,9 +12,9 @@ from discord.message import Message
 from . import actions, data
 from .cogs.configure import ConfigureCog
 from .cogs.leaderboards import LeaderboardsCog
+from .cogs.profile import ProfileCog
 from .cogs.rank import RankCog
 from .cogs.ranking import RankingCog
-from .cogs.profile import ProfileCog
 from .settings import (
     BUGOUT_BROOD_URL,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,

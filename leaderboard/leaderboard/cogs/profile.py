@@ -1,10 +1,11 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.interactions import InteractionMessage
 
 from .. import actions, data
 
@@ -54,15 +55,63 @@ class RemoveIdentityModal(discord.ui.Modal, title="Remove identity"):
 
 
 class UserView(discord.ui.View):
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        title: str,
+        description: str,
+        wrapped_fields: List[List[Any]],
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+
+        self.message: InteractionMessage
+
+        self.title = title
+        self.description = description
+        self.wrapped_fields = wrapped_fields
+
+        self.current_page: int = 1
+        self.offset: int = 5
+        self.total_pages = actions.calc_total_pages(
+            fields_len=len(wrapped_fields),
+            offset=self.offset,
+            current_page=self.current_page,
+        )
 
         self.ident_input: Optional[str] = None
         self.name_input: Optional[str] = None
 
         self.remove_ident_input: Optional[str] = None
 
-    @discord.ui.button(label="Link new identification")
+    async def send(self, interaction: discord.Interaction):
+        await interaction.response.send_message(view=self, ephemeral=True)
+        self.message = await interaction.original_response()
+        await self.update_view(self.wrapped_fields[: self.offset])
+
+    async def update_view(self, wrapped_fields: List[List[Any]]):
+        """
+        Update current view and navigation buttons to handle pagination.
+        """
+        actions.nav_buttons_styling(
+            button_next=self.button_next,
+            button_previous=self.button_previous,
+            current_page=self.current_page,
+            total_pages=self.total_pages,
+        )
+
+        await self.message.edit(
+            embed=actions.prepare_dynamic_embed_with_pagination(
+                title=self.title,
+                description=self.description,
+                current_page=self.current_page,
+                total_pages=self.total_pages,
+                wrapped_fields=wrapped_fields,
+            ),
+            view=self,
+        )
+
+    @discord.ui.button(label="Link new identity", row=1)
     async def button_add_new_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -73,7 +122,7 @@ class UserView(discord.ui.View):
         self.name_input = add_new_ident_modal.n_input
         self.stop()
 
-    @discord.ui.button(label="Unpin the identification")
+    @discord.ui.button(label="Unpin the identity", row=1)
     async def button_delete_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -82,6 +131,28 @@ class UserView(discord.ui.View):
         await remove_ident_modal.wait()
         self.remove_ident_input = remove_ident_modal.r_i_input
         self.stop()
+
+    @discord.ui.button(label="<", row=2)
+    async def button_previous(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.defer()
+        self.current_page -= 1
+        until_item = self.current_page * self.offset
+        await self.update_view(
+            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
+        )
+
+    @discord.ui.button(label=">", row=2)
+    async def button_next(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.defer()
+        self.current_page += 1
+        until_item = self.current_page * self.offset
+        await self.update_view(
+            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
+        )
 
 
 class ProfileCog(commands.Cog):
@@ -276,7 +347,7 @@ class ProfileCog(commands.Cog):
         user_identities: List[data.UserIdentity] = self.bot.user_idents.get(
             discord_user_id, []
         )
-        # TODO(kompotkot): Pagination
+
         identity_fields = [
             [
                 {
@@ -292,26 +363,21 @@ class ProfileCog(commands.Cog):
             for i in user_identities
         ]
 
-        user_view = UserView()
+        user_view = UserView(
+            title="Identities linked to Discord user",
+            description=(
+                "" if len(user_identities) != 0 else "There are no linked identities"
+            ),
+            wrapped_fields=identity_fields,
+        )
 
         # Turn off Unpin the identification button if there are no identities attached to Discord user
         user_view.button_delete_identity.disabled = (
             True if len(user_identities) == 0 else False
         )
 
-        await interaction.response.send_message(
-            embed=actions.prepare_dynamic_embed(
-                title="Identities linked to Discord user",
-                description=(
-                    ""
-                    if len(user_identities) != 0
-                    else "There are no linked identities"
-                ),
-                fields=[f for d in identity_fields for f in d],
-            ),
-            view=user_view,
-            ephemeral=True,
-        )
+        await user_view.send(interaction)
+
         await user_view.wait()
 
         if user_view.ident_input is not None:

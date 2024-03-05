@@ -82,6 +82,56 @@ def prepare_dynamic_embed(
     return embed
 
 
+def prepare_dynamic_embed_with_pagination(
+    title: str,
+    description: str,
+    wrapped_fields: List[List[Any]],
+    current_page: int,
+    total_pages: int,
+) -> Embed:
+    description += "\n"
+    description += f"Page: {current_page}/{total_pages}"
+    embed = Embed(
+        title=title,
+        description=description,
+    )
+    for wf in wrapped_fields:
+        for f in wf:
+            embed.add_field(name=f["field_name"], value=f["field_value"])
+
+    return embed
+
+
+def calc_total_pages(fields_len: int, offset: int, current_page: int) -> int:
+    total_pages = int(fields_len / offset)
+    if fields_len == 0:
+        total_pages = current_page
+    elif fields_len % offset != 0:
+        total_pages += 1
+    return total_pages
+
+
+def nav_buttons_styling(
+    button_next: discord.ui.Button,
+    button_previous: discord.ui.Button,
+    current_page: int,
+    total_pages: int,
+):
+    if current_page == 1:
+        button_previous.disabled = True
+        button_previous.style = discord.ButtonStyle.gray
+    else:
+        button_previous.disabled = False
+        button_previous.style = discord.ButtonStyle.primary
+
+    if current_page == total_pages:
+        button_next.disabled = True
+        button_next.style = discord.ButtonStyle.gray
+    else:
+        button_next.disabled = False
+        button_next.style = discord.ButtonStyle.primary
+
+
 class DynamicSelect(discord.ui.Select):
     def __init__(
         self,
