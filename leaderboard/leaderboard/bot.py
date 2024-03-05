@@ -267,7 +267,7 @@ class LeaderboardDiscordBot(commands.Bot):
             )
             if response is not None:
                 resources = BugoutResources(**response)
-                logger.info(f"Fetched identities of {len(resources.resources)} users")
+                logger.info(f"Fetched {len(resources.resources)} identities for users")
                 for r in resources.resources:
                     self.set_user_idents_from_resource(resource=r)
 

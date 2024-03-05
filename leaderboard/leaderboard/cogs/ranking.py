@@ -127,12 +127,16 @@ class RankingCog(commands.Cog):
 
         server_config = self.bot.server_configs.get(interaction.guild.id)
 
+        cnt = 0
         if server_config is not None:
             for l in server_config.resource_data.leaderboards:
+                if cnt >= 20:
+                    break
                 if current.lower() in l.short_name.lower():
                     autocompletion.append(
                         app_commands.Choice(
                             name=l.short_name, value=str(l.leaderboard_id)
                         )
                     )
+                    cnt += 1
         return autocompletion
