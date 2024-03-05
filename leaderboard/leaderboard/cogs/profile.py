@@ -5,7 +5,6 @@ from typing import Any, List, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.interactions import InteractionMessage
 
 from .. import actions, data
 
@@ -54,62 +53,18 @@ class RemoveIdentityModal(discord.ui.Modal, title="Remove identity"):
         await interaction.response.defer()
 
 
-class UserView(discord.ui.View):
+class UserView(actions.PaginationView):
     def __init__(
         self,
-        title: str,
-        description: str,
-        wrapped_fields: List[List[Any]],
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.message: InteractionMessage
-
-        self.title = title
-        self.description = description
-        self.wrapped_fields = wrapped_fields
-
-        self.current_page: int = 1
-        self.offset: int = 5
-        self.total_pages = actions.calc_total_pages(
-            fields_len=len(wrapped_fields),
-            offset=self.offset,
-            current_page=self.current_page,
-        )
-
         self.ident_input: Optional[str] = None
         self.name_input: Optional[str] = None
 
         self.remove_ident_input: Optional[str] = None
-
-    async def send(self, interaction: discord.Interaction):
-        await interaction.response.send_message(view=self, ephemeral=True)
-        self.message = await interaction.original_response()
-        await self.update_view(self.wrapped_fields[: self.offset])
-
-    async def update_view(self, wrapped_fields: List[List[Any]]):
-        """
-        Update current view and navigation buttons to handle pagination.
-        """
-        actions.nav_buttons_styling(
-            button_next=self.button_next,
-            button_previous=self.button_previous,
-            current_page=self.current_page,
-            total_pages=self.total_pages,
-        )
-
-        await self.message.edit(
-            embed=actions.prepare_dynamic_embed_with_pagination(
-                title=self.title,
-                description=self.description,
-                current_page=self.current_page,
-                total_pages=self.total_pages,
-                wrapped_fields=wrapped_fields,
-            ),
-            view=self,
-        )
 
     @discord.ui.button(label="Link new identity", row=1)
     async def button_add_new_identity(
@@ -131,28 +86,6 @@ class UserView(discord.ui.View):
         await remove_ident_modal.wait()
         self.remove_ident_input = remove_ident_modal.r_i_input
         self.stop()
-
-    @discord.ui.button(label="<", row=2)
-    async def button_previous(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.defer()
-        self.current_page -= 1
-        until_item = self.current_page * self.offset
-        await self.update_view(
-            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
-        )
-
-    @discord.ui.button(label=">", row=2)
-    async def button_next(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.defer()
-        self.current_page += 1
-        until_item = self.current_page * self.offset
-        await self.update_view(
-            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
-        )
 
 
 class ProfileCog(commands.Cog):
