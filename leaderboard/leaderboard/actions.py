@@ -10,6 +10,7 @@ import discord
 from bugout.data import BugoutResource
 from discord import Embed
 from discord.guild import Guild
+from discord.interactions import InteractionMessage
 from discord.member import Member
 from discord.role import Role
 from discord.user import User
@@ -34,6 +35,92 @@ class QueryNotValid(Exception):
     """
     Raised when query validation not passed.
     """
+
+
+class PaginationView(discord.ui.View):
+    def __init__(
+        self,
+        title: str,
+        description: str,
+        wrapped_fields: List[List[Any]],
+        ephemeral: bool = False,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+
+        self.message: InteractionMessage
+
+        self.title = title
+        self.description = description
+        self.wrapped_fields = wrapped_fields
+
+        self.current_page: int = 1
+        self.offset: int = 5
+        fields_len = len(wrapped_fields)
+        self.total_pages = int(fields_len / self.offset)
+        if fields_len == 0:
+            self.total_pages = self.current_page
+        elif fields_len % self.offset != 0:
+            self.total_pages += 1
+
+        self.ephemeral = ephemeral
+
+    async def send(self, interaction: discord.Interaction):
+        await interaction.response.send_message(view=self, ephemeral=self.ephemeral)
+        self.message = await interaction.original_response()
+        await self.update_view(self.wrapped_fields[: self.offset])
+
+    async def update_view(self, wrapped_fields: List[List[Any]]):
+        """
+        Update current view and navigation buttons to handle pagination.
+        """
+        if self.current_page == 1:
+            self.button_previous.disabled = True
+            self.button_previous.style = discord.ButtonStyle.gray
+        else:
+            self.button_previous.disabled = False
+            self.button_previous.style = discord.ButtonStyle.primary
+
+        if self.current_page == self.total_pages:
+            self.button_next.disabled = True
+            self.button_next.style = discord.ButtonStyle.gray
+        else:
+            self.button_next.disabled = False
+            self.button_next.style = discord.ButtonStyle.primary
+
+        await self.message.edit(
+            embed=prepare_dynamic_embed_with_pagination(
+                title=self.title,
+                description=self.description,
+                current_page=self.current_page,
+                total_pages=self.total_pages,
+                wrapped_fields=wrapped_fields,
+            ),
+            view=self,
+        )
+
+    @discord.ui.button(label="<", row=2)
+    async def button_previous(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.defer()
+        self.current_page -= 1
+        until_item = self.current_page * self.offset
+        await self.update_view(
+            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
+        )
+
+    @discord.ui.button(label=">", row=2)
+    async def button_next(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.defer()
+        self.current_page += 1
+        until_item = self.current_page * self.offset
+        await self.update_view(
+            wrapped_fields=self.wrapped_fields[until_item - self.offset : until_item]
+        )
 
 
 def score_converter(
@@ -78,6 +165,26 @@ def prepare_dynamic_embed(
     )
     for f in fields:
         embed.add_field(name=f["field_name"], value=f["field_value"])
+
+    return embed
+
+
+def prepare_dynamic_embed_with_pagination(
+    title: str,
+    description: str,
+    wrapped_fields: List[List[Any]],
+    current_page: int,
+    total_pages: int,
+) -> Embed:
+    description += "\n"
+    description += f"Page: {current_page}/{total_pages}"
+    embed = Embed(
+        title=title,
+        description=description,
+    )
+    for wf in wrapped_fields:
+        for f in wf:
+            embed.add_field(name=f["field_name"], value=f["field_value"])
 
     return embed
 

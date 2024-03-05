@@ -215,7 +215,8 @@ class RankCog(commands.Cog):
                     leaderboards.append(l)
 
         leaderboard_id: Optional[uuid.UUID] = None
-        if len(leaderboards) == 1:
+        leaderboards_len = len(leaderboards)
+        if leaderboards_len == 1:
             leaderboard_id = leaderboards[0].leaderboard_id
             await interaction.response.send_message(
                 embed=discord.Embed(
@@ -223,7 +224,14 @@ class RankCog(commands.Cog):
                 ),
                 ephemeral=True,
             )
-        elif len(leaderboards) > 1:
+        elif leaderboards_len > 1:
+            if leaderboards_len >= 25:
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        description="Too many leaderboards linked to channel, please connect to Discord server administrator"
+                    )
+                )
+                return
             leaderboard_select_view = LeaderboardSelectView(leaderboards)
             await interaction.response.send_message(
                 embed=discord.Embed(
@@ -275,7 +283,10 @@ class RankCog(commands.Cog):
             interaction.user.id, []
         )
 
+        cnt = 0
         for i in user_identities:
+            if cnt >= 20:
+                break
             if (
                 current.lower() in i.name.lower()
                 or current.lower() in i.identifier.lower()
@@ -286,4 +297,5 @@ class RankCog(commands.Cog):
                         value=i.identifier,
                     )
                 )
+                cnt += 1
         return autocompletion

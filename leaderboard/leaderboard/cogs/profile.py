@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import discord
 from discord import app_commands
@@ -53,8 +53,12 @@ class RemoveIdentityModal(discord.ui.Modal, title="Remove identity"):
         await interaction.response.defer()
 
 
-class UserView(discord.ui.View):
-    def __init__(self, *args, **kwargs):
+class UserView(actions.PaginationView):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         self.ident_input: Optional[str] = None
@@ -62,7 +66,7 @@ class UserView(discord.ui.View):
 
         self.remove_ident_input: Optional[str] = None
 
-    @discord.ui.button(label="Link new identification")
+    @discord.ui.button(label="Link new identity", row=1)
     async def button_add_new_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -73,7 +77,7 @@ class UserView(discord.ui.View):
         self.name_input = add_new_ident_modal.n_input
         self.stop()
 
-    @discord.ui.button(label="Unpin the identification")
+    @discord.ui.button(label="Unpin the identity", row=1)
     async def button_delete_identity(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -276,7 +280,7 @@ class ProfileCog(commands.Cog):
         user_identities: List[data.UserIdentity] = self.bot.user_idents.get(
             discord_user_id, []
         )
-        # TODO(kompotkot): Pagination
+
         identity_fields = [
             [
                 {
@@ -292,26 +296,22 @@ class ProfileCog(commands.Cog):
             for i in user_identities
         ]
 
-        user_view = UserView()
+        user_view = UserView(
+            title="Identities linked to Discord user",
+            description=(
+                "" if len(user_identities) != 0 else "There are no linked identities"
+            ),
+            wrapped_fields=identity_fields,
+            ephemeral=True,
+        )
 
         # Turn off Unpin the identification button if there are no identities attached to Discord user
         user_view.button_delete_identity.disabled = (
             True if len(user_identities) == 0 else False
         )
 
-        await interaction.response.send_message(
-            embed=actions.prepare_dynamic_embed(
-                title="Identities linked to Discord user",
-                description=(
-                    ""
-                    if len(user_identities) != 0
-                    else "There are no linked identities"
-                ),
-                fields=[f for d in identity_fields for f in d],
-            ),
-            view=user_view,
-            ephemeral=True,
-        )
+        await user_view.send(interaction)
+
         await user_view.wait()
 
         if user_view.ident_input is not None:

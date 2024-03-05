@@ -12,9 +12,9 @@ from discord.message import Message
 from . import actions, data
 from .cogs.configure import ConfigureCog
 from .cogs.leaderboards import LeaderboardsCog
+from .cogs.profile import ProfileCog
 from .cogs.rank import RankCog
 from .cogs.ranking import RankingCog
-from .cogs.profile import ProfileCog
 from .settings import (
     BUGOUT_BROOD_URL,
     BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
@@ -267,7 +267,7 @@ class LeaderboardDiscordBot(commands.Bot):
             )
             if response is not None:
                 resources = BugoutResources(**response)
-                logger.info(f"Fetched identities of {len(resources.resources)} users")
+                logger.info(f"Fetched {len(resources.resources)} identities for users")
                 for r in resources.resources:
                     self.set_user_idents_from_resource(resource=r)
 

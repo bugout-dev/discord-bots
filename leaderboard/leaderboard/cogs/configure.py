@@ -103,7 +103,7 @@ class RoleSelectView(discord.ui.View):
         self.stop()
 
 
-class ConfigureView(discord.ui.View):
+class ConfigureView(actions.PaginationView):
     def __init__(
         self,
         *args,
@@ -381,8 +381,19 @@ class ConfigureCog(commands.Cog):
                 logger.warning(f"Unable to parse channel ID {x} from input to integer")
                 continue
 
+        try:
+            leaderboard_id_uuid = uuid.UUID(str(configure_view.leaderboard_id))
+        except Exception as e:
+            logger.error(e)
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description=f"Incorrect leaderboard UUID format {str(configure_view.leaderboard_id)}"
+                ),
+            )
+            return
+
         new_leaderboard = data.ConfigLeaderboard(
-            leaderboard_id=uuid.UUID(str(configure_view.leaderboard_id)),
+            leaderboard_id=leaderboard_id_uuid,
             short_name=str(configure_view.short_name),
             channel_ids=channel_ids,
         )
@@ -479,7 +490,38 @@ class ConfigureCog(commands.Cog):
             )
             return
 
-        configure_view = ConfigureView()
+        allowed_roles: List[str] = []
+        wrapped_fields = []
+        if server_config is not None:
+            allowed_roles = [
+                r.name for r in server_config.resource_data.discord_auth_roles
+            ]
+            for leaderboard in server_config.resource_data.leaderboards:
+                wrapped_fields.append(
+                    [
+                        {
+                            "field_name": "Leaderboard ID",
+                            "field_value": f"[{str(leaderboard.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={leaderboard.leaderboard_id})",
+                        },
+                        {
+                            "field_name": "Short name",
+                            "field_value": leaderboard.short_name,
+                        },
+                        {
+                            "field_name": "Channel IDs",
+                            "field_value": ", ".join(
+                                [str(i) for i in leaderboard.channel_ids]
+                            ),
+                        },
+                    ]
+                )
+
+        configure_view = ConfigureView(
+            title="Leaderboard bot configuration of Discord server",
+            description=f"Allowed roles to manage Discord server configuration: {', '.join(allowed_roles) if len(allowed_roles) > 0 else '**-**'}",
+            wrapped_fields=wrapped_fields,
+            ephemeral=True,
+        )
 
         # Turn off Unlink leaderboard button if there are no leaderboards attached to Discord server
         if (
@@ -490,47 +532,8 @@ class ConfigureCog(commands.Cog):
         else:
             configure_view.button_unlink_leaderboard.disabled = True
 
-        allowed_roles: List[str] = []
-        fields = []
-        list_of_linked_leaderboard_ids = []
-        if server_config is not None:
-            allowed_roles = [
-                r.name for r in server_config.resource_data.discord_auth_roles
-            ]
+        await configure_view.send(interaction)
 
-            for leaderboard in server_config.resource_data.leaderboards:
-                list_of_linked_leaderboard_ids.append(str(leaderboard.leaderboard_id))
-                if interaction.channel is not None:
-                    for ch in leaderboard.channel_ids:
-                        if ch == interaction.channel.id:
-                            fields.extend(
-                                [
-                                    {
-                                        "field_name": "Leaderboard ID",
-                                        "field_value": f"[{str(leaderboard.leaderboard_id)}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={leaderboard.leaderboard_id})",
-                                    },
-                                    {
-                                        "field_name": "Short name",
-                                        "field_value": leaderboard.short_name,
-                                    },
-                                    {
-                                        "field_name": "Channel IDs",
-                                        "field_value": ", ".join(
-                                            [str(i) for i in leaderboard.channel_ids]
-                                        ),
-                                    },
-                                ]
-                            )
-
-        await interaction.response.send_message(
-            embed=actions.prepare_dynamic_embed(
-                title="Leaderboard bot configuration of Discord server",
-                description=f"Allowed roles to manage Discord server configuration: {', '.join(allowed_roles) if len(allowed_roles) > 0 else '**-**'}\n\nLinked leaderboard IDs: {', '.join(list_of_linked_leaderboard_ids)  if len(list_of_linked_leaderboard_ids) > 0 else '**-**'}",
-                fields=fields,
-            ),
-            view=configure_view,
-            ephemeral=True,
-        )
         await configure_view.wait()
 
         if len(configure_view.authorized_roles) != 0:

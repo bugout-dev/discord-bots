@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import discord
 from discord import app_commands
@@ -10,6 +10,15 @@ from .. import actions, data
 from ..settings import MOONSTREAM_URL
 
 logger = logging.getLogger(__name__)
+
+
+class LeaderboardsView(actions.PaginationView):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
 
 
 class LeaderboardsCog(commands.Cog):
@@ -57,31 +66,32 @@ class LeaderboardsCog(commands.Cog):
             )
             return
 
-        await interaction.response.send_message(
-            embed=actions.prepare_dynamic_embed(
-                title="",
-                description="",
-                fields=[
-                    d
-                    for l in server_config.resource_data.leaderboards
-                    for d in [
-                        {
-                            "field_name": "Short name",
-                            "field_value": l.short_name,
-                        },
-                        {
-                            "field_name": "Title",
-                            "field_value": f"[{l.leaderboard_info.title if l.leaderboard_info is not None else '-'}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
-                        },
-                        {
-                            "field_name": "Description",
-                            "field_value": (
-                                l.leaderboard_info.description
-                                if l.leaderboard_info is not None
-                                else "-"
-                            ),
-                        },
-                    ]
-                ],
-            )
+        leaderboard_fields = [
+            [
+                {
+                    "field_name": "Short name",
+                    "field_value": l.short_name,
+                },
+                {
+                    "field_name": "Title",
+                    "field_value": f"[{l.leaderboard_info.title if l.leaderboard_info is not None else '-'}]({MOONSTREAM_URL}/leaderboards/?leaderboard_id={l.leaderboard_id})",
+                },
+                {
+                    "field_name": "Description",
+                    "field_value": (
+                        l.leaderboard_info.description
+                        if l.leaderboard_info is not None
+                        else "-"
+                    ),
+                },
+            ]
+            for l in server_config.resource_data.leaderboards
+        ]
+
+        leaderboards_view = LeaderboardsView(
+            title="Linked leaderboards",
+            description="",
+            wrapped_fields=leaderboard_fields,
         )
+
+        await leaderboards_view.send(interaction)
