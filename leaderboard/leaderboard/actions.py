@@ -238,7 +238,8 @@ async def caller(
     semaphore: asyncio.Semaphore,
     method: data.RequestMethods = data.RequestMethods.GET,
     request_data: Optional[Dict[str, Any]] = None,
-    is_auth: bool = False,
+    token: Optional[str] = None,
+    auth_schema: str = "Bearer",
     timeout: int = 5,
 ) -> Optional[Any]:
     async with semaphore:
@@ -252,10 +253,10 @@ async def caller(
                 ):
                     request_kwargs["json"] = request_data
                     request_kwargs["headers"]["Content-Type"] = "application/json"
-                if is_auth is True:
+                if token is not None:
                     request_kwargs["headers"][
                         "Authorization"
-                    ] = f"Bearer {MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN}"
+                    ] = f"{auth_schema} {token}"
                 async with request_method(url, **request_kwargs) as response:
                     response.raise_for_status()
                     json_response = await response.json()
@@ -350,7 +351,7 @@ async def push_user_identity(
                 "name": name,
             },
         },
-        is_auth=True,
+        token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     )
 
     if response is not None:
@@ -368,7 +369,7 @@ async def remove_user_identity(resource_id: uuid.UUID) -> Optional[uuid.UUID]:
         url=f"{BUGOUT_BROOD_URL}/resources/{str(resource_id)}",
         semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.DELETE,
-        is_auth=True,
+        token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     )
 
     if response is not None:
@@ -443,7 +444,7 @@ async def create_server_config(
                 "discord_server_id": discord_server_id,
             },
         },
-        is_auth=True,
+        token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     )
 
     if response is not None:
@@ -477,7 +478,7 @@ async def update_server_config(
         semaphore=asyncio.Semaphore(1),
         method=data.RequestMethods.PUT,
         request_data=request_data,
-        is_auth=True,
+        token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
     )
 
     if response is not None:

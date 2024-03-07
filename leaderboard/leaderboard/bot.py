@@ -238,7 +238,9 @@ class LeaderboardDiscordBot(commands.Bot):
 
     async def load_bugout_configs(self, semaphore: asyncio.Semaphore) -> int:
         url = f"{BUGOUT_BROOD_URL}/resources/?application_id={MOONSTREAM_APPLICATION_ID}&type={BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG}"
-        response = await actions.caller(url=url, semaphore=semaphore, is_auth=True)
+        response = await actions.caller(
+            url=url, semaphore=semaphore, token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN
+        )
 
         if response is None:
             logger.warning("Unable to fetch configurations from Bugout resources")
@@ -263,7 +265,7 @@ class LeaderboardDiscordBot(commands.Bot):
             response = await actions.caller(
                 url=f"{BUGOUT_BROOD_URL}/resources/?application_id={MOONSTREAM_APPLICATION_ID}&type={BUGOUT_RESOURCE_TYPE_DISCORD_BOT_USER_IDENTIFIER}",
                 semaphore=semaphore,
-                is_auth=True,
+                token=MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN,
             )
             if response is not None:
                 resources = BugoutResources(**response)

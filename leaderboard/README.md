@@ -1,12 +1,12 @@
 # leaderboard bot
 
+## Bot CLI
+
 Run discord bot, set `LEADERBOARD_DISCORD_BOT_DEBUG=true` environment variable if debug log required:
 
 ```bash
 leaderboard discord run
 ```
-
-## CLI
 
 List Discord server configurations from Brood resources:
 

@@ -19,6 +19,7 @@ setup(
     ],
     extras_require={
         "dev": ["black", "isort", "mypy", "types-requests", "types-python-dateutil"],
+        "api": ["fastapi", "uvicorn"],
     },
     package_data={"machine": ["py.typed"]},
     zip_safe=False,
@@ -35,5 +36,10 @@ setup(
     ],
     url="https://github.com/moonstream-to/discord-bots/leaderboard",
     python_requires=">=3.8",
-    entry_points={"console_scripts": ["leaderboard=leaderboard.cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "leaderboard=leaderboard.cli:main",
+            "api=leaderboard.api.api:main",
+        ]
+    },
 )
