@@ -137,7 +137,7 @@ async def extent_guild_with_channels(
         leaderboards = []
         if config is not None:
             leaderboards = config.get(ch_id, [])
-        
+
         if len(leaderboards) == 0:
             continue
 
@@ -195,8 +195,8 @@ def run_app() -> FastAPI:
     async def get_version_handler() -> data.VersionResponse:
         return data.VersionResponse(version=LEADERBOARD_DISCORD_BOT_API_VERSION)
 
-    @app.get("/guilds", response_model=data.GuildsResponse)
-    async def get_guilds_with_channels_handler():
+    @app.get("/integrations", response_model=data.GuildsResponse)
+    async def get_integrations_handler():
         guilds = data.GuildsResponse(guilds=[])
 
         semaphore = asyncio.Semaphore(4)
