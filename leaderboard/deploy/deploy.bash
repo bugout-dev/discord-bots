@@ -26,6 +26,7 @@ USER_SYSTEMD_DIR="${USER_SYSTEMD_DIR:-/home/ubuntu/.config/systemd/user}"
 
 # Discord bots leaderboard service files
 DISCORD_BOTS_LEADERBOARD_SERVICE_FILE="discord-bots-leaderboard.service"
+DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE="discord-bots-leaderboard-api.service"
 
 set -eu
 
@@ -37,7 +38,7 @@ echo -e "${PREFIX_INFO} Upgrading Python pip and setuptools"
 echo
 echo
 echo -e "${PREFIX_INFO} Installing Python dependencies"
-"${PIP}" install -e "${APP_DIR}/"
+"${PIP}" install -e "${APP_DIR}/[api]"
 
 echo
 echo
@@ -57,6 +58,9 @@ echo "MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN=${MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN}
 MOONSTREAM_APPLICATION_ID=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name MOONSTREAM_APPLICATION_ID)
 echo "MOONSTREAM_APPLICATION_ID=${MOONSTREAM_APPLICATION_ID}" >> "${PARAMETERS_ENV_PATH}"
 
+LEADERBOARD_DISCORD_BOT_API_CORS_ALLOWED_ORIGINS=$(HOME=/home/ubuntu AWS_DEFAULT_REGION=us-east-1 aws ssm get-parameter --query "Parameter.Value" --output text --name LEADERBOARD_DISCORD_BOT_API_CORS_ALLOWED_ORIGINS)
+echo "LEADERBOARD_DISCORD_BOT_API_CORS_ALLOWED_ORIGINS=${LEADERBOARD_DISCORD_BOT_API_CORS_ALLOWED_ORIGINS}" >> "${PARAMETERS_ENV_PATH}"
+
 echo
 echo
 echo -e "${PREFIX_INFO} Prepare user systemd directory"
@@ -72,3 +76,11 @@ chmod 644 "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
 cp "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}" "${USER_SYSTEMD_DIR}/${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
 XDG_RUNTIME_DIR="/run/user/1000" systemctl --user daemon-reload
 XDG_RUNTIME_DIR="/run/user/1000" systemctl --user restart --no-block "${DISCORD_BOTS_LEADERBOARD_SERVICE_FILE}"
+
+echo
+echo
+echo -e "${PREFIX_INFO} Replacing existing Discord leaderboard bot API service definition with ${DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE}"
+chmod 644 "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE}"
+cp "${SCRIPT_DIR}/${DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE}" "${USER_SYSTEMD_DIR}/${DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE}"
+XDG_RUNTIME_DIR="/run/user/1000" systemctl --user daemon-reload
+XDG_RUNTIME_DIR="/run/user/1000" systemctl --user restart --no-block "${DISCORD_BOTS_LEADERBOARD_API_SERVICE_FILE}"

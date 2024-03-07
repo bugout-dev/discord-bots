@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord leaderboard bot API
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+WorkingDirectory=/home/ubuntu/discord-bots/leaderboard
+EnvironmentFile=/home/ubuntu/discord-bots-leaderboard-secrets/app.env
+Restart=on-failure
+RestartSec=15s
+ExecStart=/home/ubuntu/discord-bots-leaderboard-env/bin/uvicorn --proxy-headers --forwarded-allow-ips='127.0.0.1' --host 127.0.0.1 --port 8426 --workers 2 leaderboard.api.api:run_app
+SyslogIdentifier=discord-bots-leaderboard-api
+
+[Install]
+WantedBy=multi-user.target
