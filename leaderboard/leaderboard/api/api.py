@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from bugout.data import BugoutResources
 from fastapi import FastAPI, HTTPException
@@ -106,10 +106,39 @@ async def get_guilds(semaphore: asyncio.Semaphore):
     return guilds
 
 
+def guild_extender(
+    guild: data.GuildResponse,
+    channels: List[Any],
+    config: Dict[str, List[data.LeaderboardResponse]],
+):
+    if len(config.get("", [])) != 0:
+        guild.channels.append(
+            data.GuildChannelResponse(id="", name="", leaderboards=config.get("", []))
+        )
+
+    for ch in channels:
+        ch_id = ch.get("id")
+        if ch_id is None:
+            logger.warning(f"Strange channel without ID: {ch}")
+            continue
+
+        leaderboards = config.get(ch_id, [])
+        if len(leaderboards) == 0:
+            continue
+
+        guild.channels.append(
+            data.GuildChannelResponse(
+                id=ch_id, name=ch.get("name", ""), leaderboards=leaderboards
+            )
+        )
+
+    return guild
+
+
 async def extent_guild_with_channels(
     semaphore: asyncio.Semaphore,
     guild: data.GuildResponse,
-    config: Optional[Dict[str, List[data.LeaderboardResponse]]] = None,
+    config: Dict[str, List[data.LeaderboardResponse]],
 ):
     response = await bot_actions.caller(
         url=f"{DISCORD_API_URL}/guilds/{guild.id}/channels",
@@ -120,32 +149,28 @@ async def extent_guild_with_channels(
     if response is None:
         return guild
 
-    if config is not None:
-        if len(config.get("", [])) != 0:
-            guild.channels.append(
-                data.GuildChannelResponse(
-                    id="", name="", leaderboards=config.get("", [])
-                )
-            )
+    guild = guild_extender(guild=guild, channels=response, config=config)
 
-    for ch in response:
-        ch_id = ch.get("id")
-        if ch_id is None:
-            logger.warning(f"Strange channel without ID: {ch}")
-            continue
+    return guild
 
-        leaderboards = []
-        if config is not None:
-            leaderboards = config.get(ch_id, [])
 
-        if len(leaderboards) == 0:
-            continue
+async def extent_guild_with_threads(
+    semaphore: asyncio.Semaphore,
+    guild: data.GuildResponse,
+    config: Dict[str, List[data.LeaderboardResponse]],
+):
+    response = await bot_actions.caller(
+        url=f"{DISCORD_API_URL}/guilds/{guild.id}/threads/active",
+        semaphore=semaphore,
+        token=LEADERBOARD_DISCORD_BOT_TOKEN,
+        auth_schema="Bot",
+    )
+    if response is None:
+        return guild
 
-        guild.channels.append(
-            data.GuildChannelResponse(
-                id=ch_id, name=ch.get("name", ""), leaderboards=leaderboards
-            )
-        )
+    guild = guild_extender(
+        guild=guild, channels=response.get("threads", []), config=config
+    )
 
     return guild
 
@@ -212,12 +237,23 @@ def run_app() -> FastAPI:
         try:
             tasks = []
             for g in guilds.guilds:
-                task = asyncio.create_task(
-                    extent_guild_with_channels(
-                        semaphore=semaphore, guild=g, config=configs.get(g.id)
+                config = configs.get(g.id)
+                if config is None:
+                    continue
+                tasks.append(
+                    asyncio.create_task(
+                        extent_guild_with_channels(
+                            semaphore=semaphore, guild=g, config=config
+                        )
                     )
                 )
-                tasks.append(task)
+                tasks.append(
+                    asyncio.create_task(
+                        extent_guild_with_threads(
+                            semaphore=semaphore, guild=g, config=config
+                        )
+                    )
+                )
             await asyncio.gather(*tasks)
         except Exception as e:
             logger.error(
