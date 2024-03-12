@@ -241,7 +241,13 @@ class RankCog(commands.Cog):
                 ephemeral=True,
             )
             await leaderboard_select_view.wait()
-            leaderboard_id = uuid.UUID(leaderboard_select_view.leaderboard_id)
+            try:
+                leaderboard_id = uuid.UUID(leaderboard_select_view.leaderboard_id)
+            except Exception:
+                await interaction.response.send_message(
+                    embed=discord.Embed(description=data.MESSAGE_WRONG_ID_PROVIDED)
+                )
+                return
         else:
             await interaction.response.send_message(
                 embed=discord.Embed(description=data.MESSAGE_LEADERBOARD_NOT_FOUND)

@@ -6,6 +6,7 @@ from typing import Any, Coroutine, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 MESSAGE_LEADERBOARD_NOT_FOUND = "Not found"
+MESSAGE_WRONG_ID_PROVIDED = "Wrong ID provided"
 MESSAGE_RANK_NOT_FOUND = "Rank not found"
 MESSAGE_CHANNEL_NOT_FOUND = "Discord channel not found"
 MESSAGE_GUILD_NOT_FOUND = "Discord guild not found"
