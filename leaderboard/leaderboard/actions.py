@@ -425,6 +425,17 @@ async def create_server_config(
     roles: Optional[List[data.ConfigRole]] = None,
 ):
     resource: Optional[BugoutResource] = None
+
+    light_leaderboards: List[str] = []
+    if leaderboards is not None:
+        for l in leaderboards:
+            light_l = data.ConfigLeaderboard(
+                leaderboard_id=l.leaderboard_id,
+                short_name=l.short_name,
+                channel_ids=l.channel_ids,
+            )
+            light_leaderboards.append(json.loads(light_l.json(exclude_unset=True)))
+
     response = await caller(
         url=f"{BUGOUT_BROOD_URL}/resources",
         semaphore=asyncio.Semaphore(1),
@@ -433,11 +444,7 @@ async def create_server_config(
             "application_id": MOONSTREAM_APPLICATION_ID,
             "resource_data": {
                 "type": BUGOUT_RESOURCE_TYPE_DISCORD_BOT_CONFIG,
-                "leaderboards": (
-                    [json.loads(l.json()) for l in leaderboards]
-                    if leaderboards is not None
-                    else []
-                ),
+                "leaderboards": light_leaderboards,
                 "discord_auth_roles": (
                     [r.dict() for r in roles] if roles is not None else []
                 ),
@@ -467,9 +474,17 @@ async def update_server_config(
 
     request_data: Dict[str, Any] = {"update": {}, "drop_keys": []}
     if leaderboards is not None:
-        request_data["update"]["leaderboards"] = [
-            json.loads(l.json()) for l in leaderboards
-        ]
+        light_leaderboards: List[str] = []
+        for l in leaderboards:
+            light_l = data.ConfigLeaderboard(
+                leaderboard_id=l.leaderboard_id,
+                short_name=l.short_name,
+                channel_ids=l.channel_ids,
+            )
+            light_leaderboards.append(json.loads(light_l.json(exclude_unset=True)))
+
+        request_data["update"]["leaderboards"] = light_leaderboards
+
     if roles is not None:
         request_data["update"]["discord_auth_roles"] = [r.dict() for r in roles]
 
