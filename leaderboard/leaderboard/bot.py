@@ -50,6 +50,8 @@ class LeaderboardDiscordBot(commands.Bot):
         self._server_configs: Dict[int, data.ResourceConfig] = {}
         self._user_idents: Dict[int, List[data.UserIdentity]] = {}
 
+        self.available_cogs_map: List[data.CogMap] = []
+
     def bugout_connection_init(self):
         if MOONSTREAM_DISCORD_BOT_ACCESS_TOKEN == "":
             raise Exception(
@@ -139,7 +141,6 @@ class LeaderboardDiscordBot(commands.Bot):
 
     async def setup_hook(self):
         # Prepare list of cog instances
-        available_cogs_map: List[data.CogMap] = []
         for cog in [
             ConfigureCog(self),
             RankingCog(self),
@@ -164,7 +165,7 @@ class LeaderboardDiscordBot(commands.Bot):
                     f"Passing cog with slash command {cog.slash_command_data.name}, no autocompletion"
                 )
 
-            available_cogs_map.append(cog_map)
+            self.available_cogs_map.append(cog_map)
 
             await self.add_cog(cog)
 
@@ -175,7 +176,7 @@ class LeaderboardDiscordBot(commands.Bot):
             known_guilds.append(guild)
 
         # Generate commands for specified guild and add it to command tree
-        for cog in available_cogs_map:
+        for cog in self.available_cogs_map:
             for guild in known_guilds:
                 is_command_for_guild_registered = False
 
@@ -221,6 +222,12 @@ class LeaderboardDiscordBot(commands.Bot):
         logger.info(
             f"Joined to new guild {COLORS.BLUE}{guild} - {guild.id}{COLORS.RESET}"
         )
+        for cog in self.available_cogs_map:
+            # Register common command in guild
+            await self.add_command_to_tree(
+                name=cog.slash_command_name, cog=cog, guild=guild
+            )
+            logger.debug(f"Registered command {cog.slash_command_name} at {guild.name}")
         await self.tree.sync(guild=guild)
 
     async def on_message(self, message: Message):

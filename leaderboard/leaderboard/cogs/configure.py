@@ -170,9 +170,6 @@ class ConfigureCog(commands.Cog):
     def slash_command_data(self) -> data.SlashCommandData:
         return self._slash_command_data
 
-    async def create_update_config(self, server_config, updated_leaderboards, guild_id):
-        pass
-
     async def background_process_link_leaderboard(
         self,
         interaction: discord.Interaction,
